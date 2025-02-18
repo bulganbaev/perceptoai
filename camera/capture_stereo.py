@@ -8,8 +8,8 @@ os.makedirs("images/left", exist_ok=True)
 os.makedirs("images/right", exist_ok=True)
 
 # Запускаем две камеры
-cam0 = CameraDriver(camera_id=1)
-cam1 = CameraDriver(camera_id=0)
+cam0 = CameraDriver(camera_id=0)
+cam1 = CameraDriver(camera_id=1)
 cam0.start_camera()
 cam1.start_camera()
 
