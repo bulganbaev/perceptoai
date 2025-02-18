@@ -1,18 +1,22 @@
 import libcamera
-import time
-import threading
 import cv2
 import numpy as np
+import threading
+from picamera2 import Picamera2
 
 
 class CameraDriver:
     def __init__(self, camera_id=0, width=1920, height=1080):
-        self.camera_id = camera_id  # 0 или 1 (порт камеры)
+        self.camera_id = camera_id  # 0 или 1
         self.width = width
         self.height = height
         self.running = False
         self.frame = None
         self.thread = None
+        self.picam = Picamera2(camera_id)
+
+        config = self.picam.create_still_configuration(main={'size': (self.width, self.height)})
+        self.picam.configure(config)
 
     def start_camera(self):
         """Запускает поток захвата изображения"""
@@ -24,21 +28,10 @@ class CameraDriver:
 
     def _capture_loop(self):
         """Основной цикл захвата изображений"""
-        cap = cv2.VideoCapture(self.camera_id)
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
-
-        if not cap.isOpened():
-            print(f"Ошибка: Камера {self.camera_id} не запустилась!")
-            self.running = False
-            return
-
+        self.picam.start()
         while self.running:
-            ret, frame = cap.read()
-            if ret:
-                self.frame = frame
-            time.sleep(0.01)  # Уменьшает нагрузку на CPU
-        cap.release()
+            self.frame = self.picam.capture_array()
+        self.picam.stop()
 
     def get_frame(self):
         """Возвращает последний кадр"""
@@ -49,6 +42,7 @@ class CameraDriver:
         self.running = False
         if self.thread:
             self.thread.join()
+        self.picam.close()
 
 
 if __name__ == "__main__":
