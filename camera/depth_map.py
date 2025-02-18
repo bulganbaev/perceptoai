@@ -5,6 +5,9 @@ import time
 # Загружаем ректифицированные изображения
 imgL = cv2.imread("images/left/left_rectified.jpg", cv2.IMREAD_GRAYSCALE)
 imgR = cv2.imread("images/right/right_rectified.jpg", cv2.IMREAD_GRAYSCALE)
+imgL = cv2.GaussianBlur(imgL, (5, 5), 0)
+imgR = cv2.GaussianBlur(imgR, (5, 5), 0)
+
 
 # Проверяем, что изображения загружены
 if imgL is None or imgR is None:
