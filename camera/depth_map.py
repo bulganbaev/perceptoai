@@ -1,7 +1,6 @@
 import cv2
 import numpy as np
 import time
-import open3d as o3d
 
 # Загружаем ректифицированные изображения
 imgL = cv2.imread("images/left/left_rectified.jpg", cv2.IMREAD_GRAYSCALE)
@@ -31,37 +30,29 @@ stereo = cv2.StereoBM_create(
 # Вычисляем карту диспаритета
 disparity = stereo.compute(imgL, imgR).astype(np.float32) / 16.0
 
-# Преобразуем карту диспаритета в глубину
-depth_map = cv2.reprojectImageTo3D(disparity, Q)
-
-# Формируем облако точек
-points = depth_map.reshape(-1, 3)
-colors = cv2.cvtColor(cv2.imread("images/left/left_rectified.jpg"), cv2.COLOR_BGR2RGB).reshape(-1, 3) / 255.0
-
-# Фильтруем точки с бесконечной глубиной
-mask = (disparity > disparity.min())
-points = points[mask.ravel()]
-colors = colors[mask.ravel()]
-
-# Создаем облако точек
-pcd = o3d.geometry.PointCloud()
-pcd.points = o3d.utility.Vector3dVector(points)
-pcd.colors = o3d.utility.Vector3dVector(colors)
-
 # Останавливаем таймер
 end_time = time.time()
 elapsed_time = end_time - start_time
 
-# Визуализация облака точек
-o3d.visualization.draw_geometries([pcd])
-
-# Сохраняем облако точек
-o3d.io.write_point_cloud("point_cloud.ply", pcd)
+# Преобразуем карту диспаритета в глубину
+depth_map = cv2.reprojectImageTo3D(disparity, Q)
+depth_values = depth_map[:, :, 2]  # Z-координата
 
 # Выбираем центральную точку для измерения расстояния
 h, w = disparity.shape
-center_distance = depth_map[h // 2, w // 2, 2]
+center_distance = depth_values[h // 2, w // 2]
 
-print("✅ Облако точек сохранено в point_cloud.ply")
-print(f"⏳ Оптимизированное время расчета: {elapsed_time:.4f} секунд")
+# Нормализуем карту диспаритета для визуализации
+disparity_normalized = cv2.normalize(disparity, None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX)
+disparity_normalized = np.uint8(disparity_normalized)
+
+# Показываем карту диспаритета
+cv2.imshow("Disparity Map", disparity_normalized)
+cv2.waitKey(0)
+cv2.destroyAllWindows()
+
+# Сохраняем карту диспаритета
+cv2.imwrite("disparity_map.jpg", disparity_normalized)
+print("✅ Карта диспаритета сохранена в disparity_map.jpg")
+print(f"⏳ Время расчета: {elapsed_time:.4f} секунд")
 print(f"📏 Расстояние до объекта в центре кадра: {center_distance:.2f} мм")
