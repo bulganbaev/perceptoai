@@ -12,7 +12,7 @@ if imgL is None or imgR is None:
     exit()
 
 # Загружаем параметры калибровки для перевода диспаритета в глубину
-calib_data = np.load("calibration_data.npz")
+calib_data = np.load("rectification_data.npz")
 Q = calib_data.get("Q")  # Матрица реконструкции 3D
 if Q is None:
     print("Ошибка: Матрица Q не найдена в calibration_data.npz!")
