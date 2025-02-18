@@ -1,51 +1,73 @@
 import cv2
-import os
-import time
-from camera_driver import CameraDriver
+import numpy as np
+import glob
 
-# Создаем папки, если их нет
-os.makedirs("images/left", exist_ok=True)
-os.makedirs("images/right", exist_ok=True)
+# Настройки шахматной доски
+CHESSBOARD_SIZE = (9, 6)  # Количество внутренних углов
+SQUARE_SIZE = 25  # Размер клетки в мм
 
-# Запускаем две камеры
-cam0 = CameraDriver(camera_id=0)
-cam1 = CameraDriver(camera_id=1)
-cam0.start_camera()
-cam1.start_camera()
+# Создаем массив реальных координат точек
+objp = np.zeros((CHESSBOARD_SIZE[0] * CHESSBOARD_SIZE[1], 3), np.float32)
+objp[:, :2] = np.mgrid[0:CHESSBOARD_SIZE[0], 0:CHESSBOARD_SIZE[1]].T.reshape(-1, 2) * SQUARE_SIZE
 
-image_count = 0
+# Списки для хранения точек
+objpoints = []  # 3D точки в реальном мире
+imgpoints_left = []  # 2D точки для левой камеры
+imgpoints_right = []  # 2D точки для правой камеры
 
-print("📸 Нажмите 's' для съемки, 'q' для выхода")
-try:
-    while True:
-        frame0 = cam0.get_frame()
-        frame1 = cam1.get_frame()
+# Загружаем изображения
+left_images = sorted(glob.glob("images/left/*.jpg"))
+right_images = sorted(glob.glob("images/right/*.jpg"))
 
-        if frame0 is not None and frame1 is not None:
-            combined = cv2.hconcat([frame0, frame1])
-            cv2.imshow("Stereo Capture", combined)
+assert len(left_images) == len(right_images), "Количество изображений должно совпадать!"
+print(f"📸 Найдено {len(left_images)} пар изображений для калибровки")
 
-        key = cv2.waitKey(1) & 0xFF
+# Обрабатываем каждую пару изображений
+for i, (left_img, right_img) in enumerate(zip(left_images, right_images)):
+    imgL = cv2.imread(left_img)
+    imgR = cv2.imread(right_img)
+    grayL = cv2.cvtColor(imgL, cv2.COLOR_BGR2GRAY)
+    grayR = cv2.cvtColor(imgR, cv2.COLOR_BGR2GRAY)
 
-        if key == ord('s'):
-            filename_left = f"images/left/left_{image_count:02d}.jpg"
-            filename_right = f"images/right/right_{image_count:02d}.jpg"
+    # Ищем шахматную доску
+    retL, cornersL = cv2.findChessboardCorners(grayL, CHESSBOARD_SIZE, None)
+    retR, cornersR = cv2.findChessboardCorners(grayR, CHESSBOARD_SIZE, None)
 
-            cv2.imwrite(filename_left, frame0)
-            cv2.imwrite(filename_right, frame1)
+    if retL and retR:
+        objpoints.append(objp)
+        imgpoints_left.append(cornersL)
+        imgpoints_right.append(cornersR)
+        print(f"✅ [{i+1}/{len(left_images)}] Шахматная доска найдена на обоих изображениях")
+    else:
+        print(f"❌ [{i+1}/{len(left_images)}] Шахматная доска не найдена, пропускаем")
 
-            print(f"✅ Снимок сохранен: {filename_left}, {filename_right}")
-            image_count += 1
-            time.sleep(0.5)  # Чтобы избежать двойного снимка
+# Калибруем каждую камеру отдельно
+print("📏 Калибровка левой камеры...")
+retL, mtxL, distL, rvecsL, tvecsL = cv2.calibrateCamera(objpoints, imgpoints_left, grayL.shape[::-1], None, None)
+print(f"🎯 Лучшая средняя ошибка RMSE для левой камеры: {retL:.6f}")
 
-        elif key == ord('q'):
-            break
+print("📏 Калибровка правой камеры...")
+retR, mtxR, distR, rvecsR, tvecsR = cv2.calibrateCamera(objpoints, imgpoints_right, grayR.shape[::-1], None, None)
+print(f"🎯 Лучшая средняя ошибка RMSE для правой камеры: {retR:.6f}")
 
-except KeyboardInterrupt:
-    pass
+# Стерео-калибровка (поиск взаимного положения камер)
+print("🔄 Запуск стерео-калибровки...")
+(retS, mtxL, distL, mtxR, distR, R, T, E, F) = cv2.stereoCalibrate(
+    objpoints, imgpoints_left, imgpoints_right,
+    mtxL, distL, mtxR, distR, grayL.shape[::-1],
+    criteria=(cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 100, 1e-5),
+    flags=cv2.CALIB_FIX_INTRINSIC
+)
+print(f"🔍 Стерео-калибровка завершена. Средняя ошибка RMSE: {retS:.6f}")
 
-# Останавливаем камеры
-cam0.stop_camera()
-cam1.stop_camera()
-cv2.destroyAllWindows()
-print("📁 Все снимки сохранены в 'images/left' и 'images/right'")
+# Вычисляем baseline
+baseline = np.linalg.norm(T)
+print(f"📏 Baseline (расстояние между камерами): {baseline:.2f} мм")
+
+# Вывод матрицы трансформации
+print("🌀 Матрица поворота (R):\n", R)
+print("🚀 Вектор трансляции (T):\n", T)
+
+# Сохраняем параметры
+np.savez("calibration_data.npz", mtxL=mtxL, distL=distL, mtxR=mtxR, distR=distR, R=R, T=T)
+print("✅ Калибровка завершена! Параметры сохранены в calibration_data.npz")
