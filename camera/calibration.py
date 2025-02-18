@@ -4,7 +4,7 @@ import glob
 
 # Настройки шахматной доски
 CHESSBOARD_SIZE = (9, 6)  # Количество внутренних углов
-SQUARE_SIZE = 25  # Размер клетки в мм
+SQUARE_SIZE = 24  # Размер клетки в мм
 
 # Создаем массив реальных координат точек
 objp = np.zeros((CHESSBOARD_SIZE[0] * CHESSBOARD_SIZE[1], 3), np.float32)
