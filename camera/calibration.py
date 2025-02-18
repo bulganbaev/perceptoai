@@ -3,8 +3,8 @@ import numpy as np
 import glob
 
 # Настройки шахматной доски
-CHESSBOARD_SIZE = (9, 6)  # Количество внутренних углов (по горизонтали, вертикали)
-SQUARE_SIZE = 25  # Размер клетки в мм (можно изменить)
+CHESSBOARD_SIZE = (9, 6)  # Количество внутренних углов
+SQUARE_SIZE = 25  # Размер клетки в мм
 
 # Создаем массив реальных координат точек
 objp = np.zeros((CHESSBOARD_SIZE[0] * CHESSBOARD_SIZE[1], 3), np.float32)
@@ -37,12 +37,11 @@ for left_img, right_img in zip(left_images, right_images):
         imgpoints_left.append(cornersL)
         imgpoints_right.append(cornersR)
 
-# Калибровка левой камеры
-retL, mtxL, distL, rvecsL, tvecsL = cv2.calibrateCamera(objpoints, imgpoints_left, grayL.shape[::-1], None, None)
-# Калибровка правой камеры
-retR, mtxR, distR, rvecsR, tvecsR = cv2.calibrateCamera(objpoints, imgpoints_right, grayR.shape[::-1], None, None)
+# Калибруем каждую камеру отдельно
+retL, mtxL, distL, _, _ = cv2.calibrateCamera(objpoints, imgpoints_left, grayL.shape[::-1], None, None)
+retR, mtxR, distR, _, _ = cv2.calibrateCamera(objpoints, imgpoints_right, grayR.shape[::-1], None, None)
 
-# Стерео-калибровка (найдем взаимное положение камер)
+# Стерео-калибровка (поиск взаимного положения камер)
 (retS, mtxL, distL, mtxR, distR, R, T, E, F) = cv2.stereoCalibrate(
     objpoints, imgpoints_left, imgpoints_right,
     mtxL, distL, mtxR, distR, grayL.shape[::-1],
