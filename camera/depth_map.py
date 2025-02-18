@@ -14,17 +14,10 @@ if imgL is None or imgR is None:
 # Запускаем таймер
 start_time = time.time()
 
-# Оптимизированные параметры SGBM
-stereo = cv2.StereoSGBM_create(
-    minDisparity=0,
-    numDisparities=32,  # Уменьшено для ускорения
-    blockSize=5,  # Меньше размер блока - быстрее
-    uniquenessRatio=5,
-    speckleWindowSize=50,
-    speckleRange=16,
-    disp12MaxDiff=0,
-    P1=8 * 3 * 5**2,
-    P2=32 * 3 * 5**2
+# Оптимизированные параметры StereoBM (более быстрый алгоритм)
+stereo = cv2.StereoBM_create(
+    numDisparities=32,  # Должно быть кратно 16
+    blockSize=9  # Баланс между качеством и скоростью
 )
 
 # Вычисляем карту диспаритета
