@@ -28,8 +28,8 @@ try:
         key = cv2.waitKey(1) & 0xFF
 
         if key == ord('s'):
-            filename_left = f"../data/images/left/left_{image_count:02d}.jpg"
-            filename_right = f"../data/images/right/right_{image_count:02d}.jpg"
+            filename_left = f"data/images/left/left_{image_count:02d}.jpg"
+            filename_right = f"data/images/right/right_{image_count:02d}.jpg"
 
             cv2.imwrite(filename_left, frame0)
             cv2.imwrite(filename_right, frame1)
