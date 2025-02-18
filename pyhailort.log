@@ -1,4 +1,0 @@
-2025-02-18 18:29:43,952 - INFO - base_utils.py:54 - (hailo) Running command 'benchmark' with 'hailortcli'
-2025-02-18 18:29:52,706 - INFO - base_utils.py:54 - (hailo) Running command 'benchmark' with 'hailortcli'
-2025-02-18 18:33:16,160 - INFO - base_utils.py:54 - (hailo) Running command 'parse-hef' with 'hailortcli'
-2025-02-18 18:35:57,162 - INFO - base_utils.py:54 - (hailo) Running command 'benchmark' with 'hailortcli'
