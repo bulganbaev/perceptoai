@@ -16,8 +16,8 @@ imgpoints_left = []  # 2D точки для левой камеры
 imgpoints_right = []  # 2D точки для правой камеры
 
 # Загружаем изображения
-left_images = sorted(glob.glob("../data/images/left/*.jpg"))
-right_images = sorted(glob.glob("../data/images/right/*.jpg"))
+left_images = sorted(glob.glob("data/images/left/*.jpg"))
+right_images = sorted(glob.glob("data/images/right/*.jpg"))
 
 assert len(left_images) == len(right_images), "Количество изображений должно совпадать!"
 print(f"📸 Найдено {len(left_images)} пар изображений для калибровки")

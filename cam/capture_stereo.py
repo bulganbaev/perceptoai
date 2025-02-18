@@ -4,8 +4,8 @@ import time
 from camera_driver import CameraDriver
 
 # Создаем папки, если их нет
-os.makedirs("images/left", exist_ok=True)
-os.makedirs("images/right", exist_ok=True)
+os.makedirs("data/images/left", exist_ok=True)
+os.makedirs("data/images/right", exist_ok=True)
 
 # Запускаем две камеры
 cam0 = CameraDriver(camera_id=0)
@@ -28,8 +28,8 @@ try:
         key = cv2.waitKey(1) & 0xFF
 
         if key == ord('s'):
-            filename_left = f"images/left/left_{image_count:02d}.jpg"
-            filename_right = f"images/right/right_{image_count:02d}.jpg"
+            filename_left = f"../data/images/left/left_{image_count:02d}.jpg"
+            filename_right = f"../data/images/right/right_{image_count:02d}.jpg"
 
             cv2.imwrite(filename_left, frame0)
             cv2.imwrite(filename_right, frame1)
