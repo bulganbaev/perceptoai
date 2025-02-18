@@ -14,17 +14,17 @@ if imgL is None or imgR is None:
 # Запускаем таймер
 start_time = time.time()
 
-# Параметры SGBM для вычисления диспаритета
+# Оптимизированные параметры SGBM
 stereo = cv2.StereoSGBM_create(
     minDisparity=0,
-    numDisparities=64,  # Должно быть кратно 16
-    blockSize=9,
-    uniquenessRatio=10,
-    speckleWindowSize=100,
-    speckleRange=32,
-    disp12MaxDiff=1,
-    P1=8 * 3 * 9**2,
-    P2=32 * 3 * 9**2
+    numDisparities=32,  # Уменьшено для ускорения
+    blockSize=5,  # Меньше размер блока - быстрее
+    uniquenessRatio=5,
+    speckleWindowSize=50,
+    speckleRange=16,
+    disp12MaxDiff=0,
+    P1=8 * 3 * 5**2,
+    P2=32 * 3 * 5**2
 )
 
 # Вычисляем карту диспаритета
@@ -46,4 +46,4 @@ cv2.destroyAllWindows()
 # Сохраняем карту глубины
 cv2.imwrite("depth_map.jpg", disparity_normalized)
 print("✅ Карта глубины сохранена в depth_map.jpg")
-print(f"⏳ Время расчета карты глубины: {elapsed_time:.4f} секунд")
+print(f"⏳ Оптимизированное время расчета: {elapsed_time:.4f} секунд")
