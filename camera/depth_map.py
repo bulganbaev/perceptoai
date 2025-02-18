@@ -1,11 +1,10 @@
 import cv2
 import numpy as np
 import time
-import matplotlib.pyplot as plt
 
 # Загружаем ректифицированные изображения
 imgL = cv2.imread("images/left/left_rectified.jpg", cv2.IMREAD_GRAYSCALE)
-imgR = cv2.imread("images/right/right_rectified.jpg", cv2.IMREAD_GRAYSCALE)
+imgR = cv2.imread("images/right/left_rectified.jpg", cv2.IMREAD_GRAYSCALE)
 
 # Проверяем, что изображения загружены
 if imgL is None or imgR is None:
@@ -20,6 +19,12 @@ imgR = clahe.apply(imgR)
 # Применяем размытие для уменьшения шума
 imgL = cv2.GaussianBlur(imgL, (5, 5), 0)
 imgR = cv2.GaussianBlur(imgR, (5, 5), 0)
+
+# Показываем обработанные изображения перед вычислением диспаритета
+cv2.imshow("Left Processed", imgL)
+cv2.imshow("Right Processed", imgR)
+cv2.waitKey(0)
+cv2.destroyAllWindows()
 
 # Загружаем параметры калибровки для перевода диспаритета в глубину
 calib_data = np.load("rectification_data.npz")
@@ -55,13 +60,6 @@ center_distance = depth_values[h // 2, w // 2]
 # Нормализуем карту диспаритета для визуализации
 disparity_normalized = cv2.normalize(disparity, None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX)
 disparity_normalized = np.uint8(disparity_normalized)
-
-# Отображаем карту глубины как heatmap
-plt.figure(figsize=(10, 6))
-plt.imshow(depth_values, cmap='jet')
-plt.colorbar(label='Глубина (мм)')
-plt.title("Heatmap Глубины")
-plt.show()
 
 # Показываем карту диспаритета
 cv2.imshow("Disparity Map", disparity_normalized)
