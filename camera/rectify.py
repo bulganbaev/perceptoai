@@ -35,3 +35,5 @@ cv2.destroyAllWindows()
 cv2.imwrite("images/left/left_rectified.jpg", rectifiedL)
 cv2.imwrite("images/right/right_rectified.jpg", rectifiedR)
 print("✅ Изображения выровнены и сохранены!")
+
+np.savez("calibration_data.npz", Q=Q)
