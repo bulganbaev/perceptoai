@@ -20,9 +20,10 @@ left_images = sorted(glob.glob("images/left/*.jpg"))
 right_images = sorted(glob.glob("images/right/*.jpg"))
 
 assert len(left_images) == len(right_images), "Количество изображений должно совпадать!"
+print(f"📸 Найдено {len(left_images)} пар изображений для калибровки")
 
 # Обрабатываем каждую пару изображений
-for left_img, right_img in zip(left_images, right_images):
+for i, (left_img, right_img) in enumerate(zip(left_images, right_images)):
     imgL = cv2.imread(left_img)
     imgR = cv2.imread(right_img)
     grayL = cv2.cvtColor(imgL, cv2.COLOR_BGR2GRAY)
@@ -36,18 +37,32 @@ for left_img, right_img in zip(left_images, right_images):
         objpoints.append(objp)
         imgpoints_left.append(cornersL)
         imgpoints_right.append(cornersR)
+        print(f"✅ [{i+1}/{len(left_images)}] Шахматная доска найдена на обоих изображениях")
+    else:
+        print(f"❌ [{i+1}/{len(left_images)}] Шахматная доска не найдена, пропускаем")
 
 # Калибруем каждую камеру отдельно
-retL, mtxL, distL, _, _ = cv2.calibrateCamera(objpoints, imgpoints_left, grayL.shape[::-1], None, None)
-retR, mtxR, distR, _, _ = cv2.calibrateCamera(objpoints, imgpoints_right, grayR.shape[::-1], None, None)
+print("📏 Калибровка левой камеры...")
+retL, mtxL, distL, rvecsL, tvecsL = cv2.calibrateCamera(objpoints, imgpoints_left, grayL.shape[::-1], None, None)
+print(f"🎯 Лучшая средняя ошибка RMSE для левой камеры: {retL:.6f}")
+
+print("📏 Калибровка правой камеры...")
+retR, mtxR, distR, rvecsR, tvecsR = cv2.calibrateCamera(objpoints, imgpoints_right, grayR.shape[::-1], None, None)
+print(f"🎯 Лучшая средняя ошибка RMSE для правой камеры: {retR:.6f}")
 
 # Стерео-калибровка (поиск взаимного положения камер)
+print("🔄 Запуск стерео-калибровки...")
 (retS, mtxL, distL, mtxR, distR, R, T, E, F) = cv2.stereoCalibrate(
     objpoints, imgpoints_left, imgpoints_right,
     mtxL, distL, mtxR, distR, grayL.shape[::-1],
     criteria=(cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 100, 1e-5),
     flags=cv2.CALIB_FIX_INTRINSIC
 )
+print(f"🔍 Стерео-калибровка завершена. Средняя ошибка RMSE: {retS:.6f}")
+
+# Вычисляем baseline
+baseline = np.linalg.norm(T)
+print(f"📏 Baseline (расстояние между камерами): {baseline:.2f} мм")
 
 # Сохраняем параметры
 np.savez("calibration_data.npz", mtxL=mtxL, distL=distL, mtxR=mtxR, distR=distR, R=R, T=T)
