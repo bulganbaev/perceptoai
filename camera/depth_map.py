@@ -23,8 +23,8 @@ start_time = time.time()
 
 # Оптимизированные параметры StereoBM (более быстрый алгоритм)
 stereo = cv2.StereoBM_create(
-    numDisparities=64,  # олжно быть кратно 16
-    blockSize=3  # Баланс между качеством и скоростью
+    numDisparities=128,  # олжно быть кратно 16
+    blockSize=21  # Баланс между качеством и скоростью
 )
 
 # Вычисляем карту диспаритета
