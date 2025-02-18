@@ -4,9 +4,8 @@ import numpy as np
 import threading
 from picamera2 import Picamera2
 
-
 class CameraDriver:
-    def __init__(self, camera_id=0, width=1920, height=1080):
+    def __init__(self, camera_id=0, width=1920, height=1080, autofocus=True):
         self.camera_id = camera_id  # 0 или 1
         self.width = width
         self.height = height
@@ -15,7 +14,8 @@ class CameraDriver:
         self.thread = None
         self.picam = Picamera2(camera_id)
 
-        config = self.picam.create_still_configuration(main={'size': (self.width, self.height)})
+        config = self.picam.create_still_configuration(main={'size': (self.width, self.height)},
+                                                       controls={"AfMode": 2 if autofocus else 0})
         self.picam.configure(config)
 
     def start_camera(self):
@@ -30,7 +30,8 @@ class CameraDriver:
         """Основной цикл захвата изображений"""
         self.picam.start()
         while self.running:
-            self.frame = self.picam.capture_array()
+            frame = self.picam.capture_array()
+            self.frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)  # Исправление BGR → RGB
         self.picam.stop()
 
     def get_frame(self):
@@ -43,7 +44,6 @@ class CameraDriver:
         if self.thread:
             self.thread.join()
         self.picam.close()
-
 
 if __name__ == "__main__":
     cam0 = CameraDriver(camera_id=0)
