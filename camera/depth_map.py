@@ -17,7 +17,7 @@ Q = calib_data.get("Q")  # Матрица реконструкции 3D
 if Q is None:
     print("Ошибка: Матрица Q не найдена в calibration_data.npz!")
     exit()
-
+print(f'{Q=}')
 # Запускаем таймер
 start_time = time.time()
 
