@@ -1,33 +1,40 @@
 import cv2
 import numpy as np
 import time
+import matplotlib.pyplot as plt
 
 # Загружаем ректифицированные изображения
 imgL = cv2.imread("images/left/left_rectified.jpg", cv2.IMREAD_GRAYSCALE)
 imgR = cv2.imread("images/right/right_rectified.jpg", cv2.IMREAD_GRAYSCALE)
-imgL = cv2.GaussianBlur(imgL, (5, 5), 0)
-imgR = cv2.GaussianBlur(imgR, (5, 5), 0)
-
 
 # Проверяем, что изображения загружены
 if imgL is None or imgR is None:
     print("Ошибка: ректифицированные изображения не найдены!")
     exit()
 
+# Применяем CLAHE (адаптивную нормализацию гистограммы)
+clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+imgL = clahe.apply(imgL)
+imgR = clahe.apply(imgR)
+
+# Применяем размытие для уменьшения шума
+imgL = cv2.GaussianBlur(imgL, (5, 5), 0)
+imgR = cv2.GaussianBlur(imgR, (5, 5), 0)
+
 # Загружаем параметры калибровки для перевода диспаритета в глубину
 calib_data = np.load("rectification_data.npz")
 Q = calib_data.get("Q")  # Матрица реконструкции 3D
 if Q is None:
-    print("Ошибка: Матрица Q не найдена в calibration_data.npz!")
+    print("Ошибка: Матрица Q не найдена в rectification_data.npz!")
     exit()
-print(f'{Q=}')
+
 # Запускаем таймер
 start_time = time.time()
 
 # Оптимизированные параметры StereoBM (более быстрый алгоритм)
 stereo = cv2.StereoBM_create(
-    numDisparities=128,  # олжно быть кратно 16
-    blockSize=21  # Баланс между качеством и скоростью
+    numDisparities=64,  # Кратное 16
+    blockSize=9  # Оптимальный баланс
 )
 
 # Вычисляем карту диспаритета
@@ -48,6 +55,13 @@ center_distance = depth_values[h // 2, w // 2]
 # Нормализуем карту диспаритета для визуализации
 disparity_normalized = cv2.normalize(disparity, None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX)
 disparity_normalized = np.uint8(disparity_normalized)
+
+# Отображаем карту глубины как heatmap
+plt.figure(figsize=(10, 6))
+plt.imshow(depth_values, cmap='jet')
+plt.colorbar(label='Глубина (мм)')
+plt.title("Heatmap Глубины")
+plt.show()
 
 # Показываем карту диспаритета
 cv2.imshow("Disparity Map", disparity_normalized)
