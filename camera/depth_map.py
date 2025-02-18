@@ -1,10 +1,11 @@
 import cv2
 import numpy as np
 import time
+import hailo_sdk_client as hailo
 
 # Загружаем ректифицированные изображения
 imgL = cv2.imread("images/left/left_rectified.jpg", cv2.IMREAD_GRAYSCALE)
-imgR = cv2.imread("images/right/right_rectified.jpg", cv2.IMREAD_GRAYSCALE)
+imgR = cv2.imread("images/right/left_rectified.jpg", cv2.IMREAD_GRAYSCALE)
 
 # Проверяем, что изображения загружены
 if imgL is None or imgR is None:
@@ -36,14 +37,9 @@ if Q is None:
 # Запускаем таймер
 start_time = time.time()
 
-# Оптимизированные параметры StereoBM (более быстрый алгоритм)
-stereo = cv2.StereoBM_create(
-    numDisparities=64,  # Кратное 16
-    blockSize=9  # Оптимальный баланс
-)
-
-# Вычисляем карту диспаритета
-disparity = stereo.compute(imgL, imgR).astype(np.float32) / 16.0
+# Используем Hailo для расчета диспаритета
+hailo_device = hailo.HailoRT()
+disparity = hailo_device.stereo_depth_estimation(imgL, imgR)
 
 # Останавливаем таймер
 end_time = time.time()
@@ -69,5 +65,5 @@ cv2.destroyAllWindows()
 # Сохраняем карту диспаритета
 cv2.imwrite("disparity_map.jpg", disparity_normalized)
 print("✅ Карта диспаритета сохранена в disparity_map.jpg")
-print(f"⏳ Время расчета: {elapsed_time:.4f} секунд")
+print(f"⏳ Время расчета с Hailo: {elapsed_time:.4f} секунд")
 print(f"📏 Расстояние до объекта в центре кадра: {center_distance:.2f} мм")
