@@ -4,7 +4,7 @@ import time
 
 # Загружаем ректифицированные изображения
 imgL = cv2.imread("images/left/left_rectified.jpg", cv2.IMREAD_GRAYSCALE)
-imgR = cv2.imread("images/right/left_rectified.jpg", cv2.IMREAD_GRAYSCALE)
+imgR = cv2.imread("images/right/right_rectified.jpg", cv2.IMREAD_GRAYSCALE)
 
 # Проверяем, что изображения загружены
 if imgL is None or imgR is None:
