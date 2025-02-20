@@ -55,10 +55,10 @@ class ObjectDetector:
             print("❌ YOLOv11s вернул пустой список!")
             return []
 
-        # Берём первый массив (остальные пустые)
-        detections = yolo_output[0]
+        # Объединяем все массивы в один
+        detections = np.vstack([arr for arr in yolo_output if arr.shape[0] > 0])
 
-        if isinstance(detections, np.ndarray) and detections.shape[-1] == 5:
+        if detections.shape[-1] == 5:
             print("🎯 Данные в формате [x1, y1, x2, y2, score]")
 
             # Фильтруем боксы по confidence
@@ -92,4 +92,4 @@ class ObjectDetector:
 
 if __name__ == "__main__":
     detector = ObjectDetector()
-    detections = detector.compute_detection("data/images/left/left_00.jpg")
+    detections = detector.compute_detection("data/images/test_image.jpg")
