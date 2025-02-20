@@ -81,8 +81,19 @@ class DepthEstimator:
         if imgL is None or imgR is None:
             raise ValueError("Ошибка загрузки изображений! Проверьте пути.")
 
-        # Применяем корректный ресайз с центрированием
-        imgL_padded, imgR_padded = self.preprocess_stereo(imgL, imgR)
+        # ✅ Делаем ректификацию перед препроцессингом
+        imgL_rect = cv2.remap(imgL, self.mapL1, self.mapL2, cv2.INTER_LINEAR)
+        imgR_rect = cv2.remap(imgR, self.mapR1, self.mapR2, cv2.INTER_LINEAR)
+
+        # ✅ Сохраняем ректифицированные изображения для анализа
+        cv2.imwrite("data/images/rectified_left.png", imgL_rect)
+        cv2.imwrite("data/images/rectified_right.png", imgR_rect)
+        print("✅ Сохранены ректифицированные изображения: rectified_left.png, rectified_right.png")
+
+        # ✅ Теперь применяем корректный ресайз с центрированием
+        imgL_padded, imgR_padded = self.preprocess_stereo(imgL_rect, imgR_rect)
+
+        # ✅ Сохраняем изображения после препроцессинга
         cv2.imwrite("data/images/processed_left.png", imgL_padded)
         cv2.imwrite("data/images/processed_right.png", imgR_padded)
         print("✅ Сохранены изображения после препроцессинга: processed_left.png, processed_right.png")
@@ -103,24 +114,20 @@ class DepthEstimator:
 
             disparity = np.squeeze(disparity)
 
-            # Визуализация disparity перед ресайзом
-            cv2.imshow("Disparity Map (Before Resize)",
-                       (disparity - disparity.min()) / (disparity.max() - disparity.min()))
-            cv2.waitKey(0)
-            cv2.destroyAllWindows()
-            cv2.imwrite("data/images/raw_disparity.png", disparity)
-            print(f"✅ Disparity map сохранена: data/images/raw_disparity.png")
+            # ✅ Сохраняем disparity перед ресайзом
+            cv2.imwrite("data/images/raw_disparity.png", disparity / np.max(disparity) * 255)
+            print("✅ Сохранена raw disparity map: raw_disparity.png")
 
-            # Масштабируем disparity обратно
+            # ✅ Масштабируем disparity обратно
             disparity = cv2.resize(disparity, (imgL.shape[1], imgL.shape[0]), interpolation=cv2.INTER_NEAREST)
         else:
-            disparity = self.stereo.compute(cv2.cvtColor(imgL, cv2.COLOR_BGR2GRAY),
-                                            cv2.cvtColor(imgR, cv2.COLOR_BGR2GRAY)).astype(np.float32) / 16.0
+            disparity = self.stereo.compute(cv2.cvtColor(imgL_rect, cv2.COLOR_BGR2GRAY),
+                                            cv2.cvtColor(imgR_rect, cv2.COLOR_BGR2GRAY)).astype(np.float32) / 16.0
 
         focal_length = self.mtxL[0, 0]
         depth_map = (focal_length * self.baseline) / (disparity + 1e-6)
 
-        # Генерируем визуализацию depth map
+        # ✅ Генерируем визуализацию depth map
         depth_visual = cv2.applyColorMap(cv2.normalize(depth_map, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U),
                                          cv2.COLORMAP_JET)
 
@@ -128,7 +135,7 @@ class DepthEstimator:
         print(f"Размер disparity map перед ресайзом: {disparity.shape}")
         print(f"Размер disparity map после ресайза: {depth_visual.shape}")
 
-        # Накладываем depth map на оригинальное изображение
+        # ✅ Накладываем depth map на оригинальное изображение
         depth_overlay = cv2.addWeighted(imgL, 0.5, depth_visual, 0.5, 0)
         cv2.imshow("Overlay Depth on Original", depth_overlay)
         cv2.waitKey(0)
@@ -139,6 +146,7 @@ class DepthEstimator:
         elapsed_time = time.time() - start_time
         print(f"⏱ Время выполнения: {elapsed_time:.4f} сек")
         return depth_visual
+
 
 if __name__ == "__main__":
     depth_estimator = DepthEstimator(use_hailo=True)
