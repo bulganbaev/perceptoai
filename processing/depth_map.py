@@ -27,7 +27,7 @@ class DepthEstimator:
             # Создаём параметры потоков через make_from_network_group
             self.input_vstreams_params = hp.InputVStreamParams.make_from_network_group(self.configured_network)
             self.output_vstreams_params = hp.OutputVStreamParams.make_from_network_group(self.configured_network,
-                                                                                         format_type=hp.FormatType.FLOAT32)
+                                                                                         format_type=hp.FormatType.UINT8)
 
             # Создаём потоки для инференса
             self.infer_vstreams = hp.InferVStreams(self.configured_network, self.input_vstreams_params,
@@ -60,7 +60,14 @@ class DepthEstimator:
             # Преобразование к размеру модели
             imgL_resized = cv2.resize(imgL, (1232, 368))
             imgR_resized = cv2.resize(imgR, (1232, 368))
-            input_tensor = np.stack((imgL_resized, imgR_resized), axis=0).astype(np.float32) / 255.0
+            input_tensor = np.stack((imgL_resized, imgR_resized), axis=0).astype(np.float32)
+
+            # Преобразуем данные в uint8
+            input_tensor = (input_tensor * 255).astype(np.uint8)
+
+            # Проверка соответствия размеров
+            print("Expected input shape:", self.input_vstreams_params["stereonet/input_layer1"].shape)
+            print("Actual input shape:", input_tensor[0].shape)
 
             # Запуск инференса на Hailo-8
             with self.infer_vstreams as infer_pipeline:
