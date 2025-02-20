@@ -62,8 +62,8 @@ class DepthEstimator:
     def compute_depth(self, imgL_path, imgR_path, save_path="data/images/depth_map.png"):
         start_time = time.time()
 
-        imgL = cv2.imread(imgL_path, cv2.IMREAD_GRAYSCALE)
-        imgR = cv2.imread(imgR_path, cv2.IMREAD_GRAYSCALE)
+        imgL = cv2.imread(imgL_path)
+        imgR = cv2.imread(imgR_path)
 
         if imgL is None or imgR is None:
             raise ValueError("Ошибка загрузки изображений! Проверьте пути.")
@@ -76,12 +76,10 @@ class DepthEstimator:
         cv2.imwrite("data/images/rectified_right.png", imgR_rect)
 
         if self.use_hailo:
-            imgL_resized = np.ascontiguousarray(
-                cv2.cvtColor(cv2.resize(imgL_rect, (1232, 368)), cv2.COLOR_GRAY2RGB).astype(np.uint8)).reshape(1, 368,
-                                                                                                               1232, 3)
-            imgR_resized = np.ascontiguousarray(
-                cv2.cvtColor(cv2.resize(imgR_rect, (1232, 368)), cv2.COLOR_GRAY2RGB).astype(np.uint8)).reshape(1, 368,
-                                                                                                               1232, 3)
+            imgL_resized = np.ascontiguousarray(cv2.resize(imgL_rect, (1232, 368)).astype(np.uint8)).reshape(1, 368,
+                                                                                                             1232, 3)
+            imgR_resized = np.ascontiguousarray(cv2.resize(imgR_rect, (1232, 368)).astype(np.uint8)).reshape(1, 368,
+                                                                                                             1232, 3)
 
             input_data = {"stereonet/input_layer1": imgL_resized, "stereonet/input_layer2": imgR_resized}
 
@@ -96,7 +94,8 @@ class DepthEstimator:
             disparity = np.squeeze(disparity)
             disparity = cv2.resize(disparity, (imgL.shape[1], imgL.shape[0]), interpolation=cv2.INTER_LINEAR)
         else:
-            disparity = self.stereo.compute(imgL_rect, imgR_rect).astype(np.float32) / 16.0
+            disparity = self.stereo.compute(cv2.cvtColor(imgL_rect, cv2.COLOR_BGR2GRAY),
+                                            cv2.cvtColor(imgR_rect, cv2.COLOR_BGR2GRAY)).astype(np.float32) / 16.0
 
         disparity = cv2.medianBlur(disparity.astype(np.uint8), 5)
 
