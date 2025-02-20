@@ -65,6 +65,10 @@ class DepthEstimator:
             imgL_resized = cv2.cvtColor(cv2.resize(imgL, (1232, 368)), cv2.COLOR_GRAY2RGB)
             imgR_resized = cv2.cvtColor(cv2.resize(imgR, (1232, 368)), cv2.COLOR_GRAY2RGB)
 
+            # Приведение к uint8 и выравнивание памяти
+            imgL_resized = np.ascontiguousarray(imgL_resized.astype(np.uint8))
+            imgR_resized = np.ascontiguousarray(imgR_resized.astype(np.uint8))
+
             # Формируем входные данные для Hailo
             input_data = {
                 "stereonet/input_layer1": imgL_resized,
