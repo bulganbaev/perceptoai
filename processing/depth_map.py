@@ -23,8 +23,13 @@ class DepthEstimator:
             self.network_groups = self.vdevice.configure(self.hef)
             self.configured_network = self.network_groups[0]  # Берём первую (и единственную) сеть
 
+            # Получаем параметры потоков
+            input_vstreams_params = self.configured_network.get_input_vstream_infos()
+            output_vstreams_params = self.configured_network.get_output_vstream_infos()
+
             # Создаём потоки для инференса
-            self.infer_vstreams = hp.InferVStreams(self.configured_network)
+            self.infer_vstreams = hp.InferVStreams(self.configured_network, input_vstreams_params,
+                                                   output_vstreams_params)
 
             print("✅ Hailo-8 успешно подключен. Потоки инференса созданы.")
         else:
