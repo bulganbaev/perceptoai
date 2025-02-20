@@ -6,7 +6,7 @@ import hailo_platform as hp
 
 class DepthEstimator:
     def __init__(self, calib_path="data/calibration/calibration_data.npz", use_hailo=True,
-                 hef_path="data/models/yolov11s.hef"):
+                 hef_path="data/models/yolov8m_pose.hef"):
         # Загружаем параметры калибровки
         calib_data = np.load(calib_path)
         self.mtxL, self.distL = calib_data["mtxL"], calib_data["distL"]
