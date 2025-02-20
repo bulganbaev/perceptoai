@@ -13,6 +13,14 @@ class DepthEstimator:
         self.mtxR, self.distR = calib_data["mtxR"], calib_data["distR"]
         self.R, self.T = calib_data["R"], calib_data["T"]
 
+        self.R1, self.R2, self.P1, self.P2, self.Q, _, _ = cv2.stereoRectify(
+            self.mtxL, self.distL, self.mtxR, self.distR, (1920, 1080), self.R, self.T, alpha=1)
+
+        self.mapL1, self.mapL2 = cv2.initUndistortRectifyMap(self.mtxL, self.distL, self.R1, self.P1, (1920, 1080),
+                                                             cv2.CV_16SC2)
+        self.mapR1, self.mapR2 = cv2.initUndistortRectifyMap(self.mtxR, self.distR, self.R2, self.P2, (1920, 1080),
+                                                             cv2.CV_16SC2)
+
         # Вычисляем baseline (расстояние между камерами)
         self.baseline = np.linalg.norm(self.T)
 
