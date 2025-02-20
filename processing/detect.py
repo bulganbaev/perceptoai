@@ -76,9 +76,8 @@ class DepthEstimator:
             with self.configured_network.activate():
                 output_data = infer_pipeline.infer(input_data)
 
-        print("📌 Доступные выходные данные YOLOv8m-Pose:")
-        for key, value in output_data.items():
-            print(f" - {key}: shape={value.shape if isinstance(value, np.ndarray) else 'unknown'}")
+        boxes = output_data["yolov8m_pose/conv59"]  # Основной выход для bbox
+        print(f"📌 Найдено боксов: {boxes.shape}")
 
         return None
 
