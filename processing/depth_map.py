@@ -75,12 +75,14 @@ class DepthEstimator:
         cv2.imwrite("data/images/rectified_right.png", imgR_rect)
 
         if self.use_hailo:
-            imgL_resized = np.ascontiguousarray(
-                cv2.cvtColor(cv2.resize(imgL_rect, (1280, 720)), cv2.COLOR_GRAY2RGB).astype(np.uint8)).reshape(1, 720,
-                                                                                                               1280, 3)
-            imgR_resized = np.ascontiguousarray(
-                cv2.cvtColor(cv2.resize(imgR_rect, (1280, 720)), cv2.COLOR_GRAY2RGB).astype(np.uint8)).reshape(1, 720,
-                                                                                                               1280, 3)
+            imgL_resized = np.ascontiguousarray(cv2.cvtColor(imgL_rect, cv2.COLOR_GRAY2RGB).astype(np.uint8)).reshape(1,
+                                                                                                                      720,
+                                                                                                                      1280,
+                                                                                                                      3)
+            imgR_resized = np.ascontiguousarray(cv2.cvtColor(imgR_rect, cv2.COLOR_GRAY2RGB).astype(np.uint8)).reshape(1,
+                                                                                                                      720,
+                                                                                                                      1280,
+                                                                                                                      3)
 
             input_data = {"stereonet/input_layer1": imgL_resized, "stereonet/input_layer2": imgR_resized}
 
@@ -93,7 +95,6 @@ class DepthEstimator:
                 raise ValueError("Ошибка: disparity пуст или не получен от модели!")
 
             disparity = np.squeeze(disparity)
-            disparity = cv2.resize(disparity, (imgL.shape[1], imgL.shape[0]), interpolation=cv2.INTER_LINEAR)
         else:
             disparity = self.stereo.compute(imgL_rect, imgR_rect).astype(np.float32) / 16.0
 
