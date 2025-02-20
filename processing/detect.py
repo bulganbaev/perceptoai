@@ -65,10 +65,11 @@ class YOLOv11sDetector:
         print("\n📌 Анализ выходных данных:")
 
         for key, value in output_data.items():
-            if isinstance(value, list):  # Если это список, печатаем его длину
+            if isinstance(value, list):  # Если список, проверяем содержимое
                 print(f" - {key}: list of {len(value)} elements")
                 if len(value) > 0 and isinstance(value[0], np.ndarray):
                     print(f"   └─ Первый элемент: shape={value[0].shape}, dtype={value[0].dtype}")
+                    self.parse_yolo_output(value[0])  # Разбираем YOLO-выход
             elif isinstance(value, np.ndarray):
                 print(f" - {key}: shape={value.shape}, dtype={value.dtype}")
             else:
@@ -76,7 +77,27 @@ class YOLOv11sDetector:
 
         return output_data
 
+    def parse_yolo_output(self, yolo_output):
+        """Разбирает выходные данные YOLOv11s"""
+        print("\n📌 Разбор выходных данных YOLOv11s:")
+
+        if yolo_output.shape[-1] == 5:
+            print("🎯 Данные в формате [x1, y1, x2, y2, score] (Bounding Boxes)")
+
+            # Выбираем только боксы с высоким score
+            threshold = 0.5
+            high_conf_boxes = yolo_output[yolo_output[:, 4] > threshold]
+
+            if len(high_conf_boxes) > 0:
+                print(f"✅ Оставлено {len(high_conf_boxes)} боксов с conf > {threshold}:")
+                print(high_conf_boxes)
+            else:
+                print("❌ Нет боксов с высоким confidence!")
+
+        else:
+            print("❓ Неизвестный формат выходных данных:", yolo_output.shape)
+
 
 if __name__ == "__main__":
     detector = YOLOv11sDetector(use_hailo=True)
-    output_data = detector.infer("data/images/left/left_00.jpg")  # Укажи путь к изображению
+    output_data = detector.infer("data/images/test_image.jpg")  # Укажи путь к изображению
