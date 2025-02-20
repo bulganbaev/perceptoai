@@ -79,4 +79,4 @@ class YOLOv11sDetector:
 
 if __name__ == "__main__":
     detector = YOLOv11sDetector(use_hailo=True)
-    output_data = detector.infer("data/images/test_image.jpg")  # Укажи путь к изображению
+    output_data = detector.infer("data/images/left/left_00.jpg")  # Укажи путь к изображению
