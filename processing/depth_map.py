@@ -64,18 +64,23 @@ class DepthEstimator:
             # Преобразование к размеру модели
             imgL_resized = cv2.cvtColor(cv2.resize(imgL, (1232, 368)), cv2.COLOR_GRAY2RGB)
             imgR_resized = cv2.cvtColor(cv2.resize(imgR, (1232, 368)), cv2.COLOR_GRAY2RGB)
-            input_tensor = np.stack((imgL_resized, imgR_resized), axis=0).astype(np.uint8)
+
+            # Формируем входные данные для Hailo
+            input_data = {
+                "stereonet/input_layer1": imgL_resized,
+                "stereonet/input_layer2": imgR_resized
+            }
 
             # Проверка соответствия размеров
             for vstream_info in self.input_vstream_infos:
                 print(f"📌 Expected shape for {vstream_info.name}: {vstream_info.shape}")
-            print("Actual input shape:", input_tensor.shape)
+            print(f"📌 Final input shape for input_layer1: {input_data['stereonet/input_layer1'].shape}")
+            print(f"📌 Final input shape for input_layer2: {input_data['stereonet/input_layer2'].shape}")
 
             # Запуск инференса на Hailo-8
             with self.infer_vstreams as infer_pipeline:
                 with self.configured_network.activate():
-                    output_data = infer_pipeline.infer(
-                        {"stereonet/input_layer1": input_tensor[0], "stereonet/input_layer2": input_tensor[1]})
+                    output_data = infer_pipeline.infer(input_data)
                     disparity = output_data["stereonet/conv53"]
 
             # Масштабируем disparity обратно к оригинальному разрешению
