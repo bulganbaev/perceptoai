@@ -23,9 +23,11 @@ class DepthEstimator:
             self.network_groups = self.vdevice.configure(self.hef)
             self.configured_network = self.network_groups[0]  # Берём первую (и единственную) сеть
 
-            # Получаем параметры потоков
-            input_vstreams_params = self.configured_network.get_input_vstream_infos()
-            output_vstreams_params = self.configured_network.get_output_vstream_infos()
+            # Преобразуем VStreamInfo в VStreamParams
+            input_vstreams_params = {vstream.name: hp.InputVStreamParams.from_vstream_info(vstream)
+                                     for vstream in self.configured_network.get_input_vstream_infos()}
+            output_vstreams_params = {vstream.name: hp.OutputVStreamParams.from_vstream_info(vstream)
+                                      for vstream in self.configured_network.get_output_vstream_infos()}
 
             # Создаём потоки для инференса
             self.infer_vstreams = hp.InferVStreams(self.configured_network, input_vstreams_params,
@@ -61,7 +63,8 @@ class DepthEstimator:
             input_tensor = np.stack((imgL_resized, imgR_resized), axis=0).astype(np.float32) / 255.0
 
             # Запуск инференса на Hailo-8
-            output_data = self.infer_vstreams.infer([input_tensor[0], input_tensor[1]])
+            output_data = self.infer_vstreams.infer(
+                {"stereonet/input_layer1": input_tensor[0], "stereonet/input_layer2": input_tensor[1]})
             disparity = output_data["stereonet/conv53"]
 
             # Масштабируем disparity обратно к оригинальному разрешению
