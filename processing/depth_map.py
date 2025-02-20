@@ -80,6 +80,21 @@ class DepthEstimator:
 
         return imgL_padded, imgR_padded
 
+    def preprocess_stereo_crop(self, imgL, imgR):
+        """
+        Обрезает центральную часть изображения до 1232x368.
+        """
+        img_h, img_w, _ = imgL.shape
+
+        # Вычисляем координаты для центрированного crop'а
+        start_x = (img_w - self.model_w) // 2
+        start_y = (img_h - self.model_h) // 2
+
+        imgL_cropped = imgL[start_y:start_y + self.model_h, start_x:start_x + self.model_w]
+        imgR_cropped = imgR[start_y:start_y + self.model_h, start_x:start_x + self.model_w]
+
+        return imgL_cropped, imgR_cropped
+
     def compute_depth(self, imgL_path, imgR_path, save_path="data/images/depth_map.png"):
         start_time = time.time()
 
@@ -99,7 +114,7 @@ class DepthEstimator:
         print("✅ Сохранены ректифицированные изображения: rectified_left.png, rectified_right.png")
 
         # ✅ Теперь применяем корректный ресайз с центрированием
-        imgL_padded, imgR_padded = self.preprocess_stereo(imgL_rect, imgR_rect)
+        imgL_padded, imgR_padded = self.preprocess_stereo_crop(imgL_rect, imgR_rect)
 
         # ✅ Сохраняем изображения после препроцессинга
         cv2.imwrite("data/images/processed_left.png", imgL_padded)
