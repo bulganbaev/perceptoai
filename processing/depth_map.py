@@ -43,7 +43,46 @@ class DepthEstimator:
                 speckleRange=32
             )
 
+    def compute_depth(self, imgL_path, imgR_path, save_path="data/images/depth_map.png"):
+        # Загружаем изображения
+        imgL = cv2.imread(imgL_path, cv2.IMREAD_GRAYSCALE)
+        imgR = cv2.imread(imgR_path, cv2.IMREAD_GRAYSCALE)
+
+        if imgL is None or imgR is None:
+            raise ValueError("Ошибка загрузки изображений! Проверьте пути.")
+
+        if self.use_hailo:
+            # Преобразование к размеру модели
+            imgL_resized = cv2.resize(imgL, (1232, 368))
+            imgR_resized = cv2.resize(imgR, (1232, 368))
+            input_tensor = np.stack((imgL_resized, imgR_resized), axis=0).astype(np.float32) / 255.0
+
+            # Отправка данных в Hailo-8
+            self.input_vstreams.write([input_tensor[0], input_tensor[1]])
+            output_data = self.output_vstreams.read()
+            disparity = output_data[0]
+
+            # Масштабируем disparity обратно к оригинальному разрешению
+            disparity = cv2.resize(disparity, (imgL.shape[1], imgL.shape[0]), interpolation=cv2.INTER_LINEAR)
+        else:
+            disparity = self.stereo.compute(imgL, imgR).astype(np.float32) / 16.0
+
+        # Вычисляем depth map
+        focal_length = self.mtxL[0, 0]  # Фокусное расстояние из матрицы камеры
+        depth_map = (focal_length * self.baseline) / (disparity + 1e-6)  # +1e-6 для избегания деления на 0
+
+        # Нормализация и визуализация
+        depth_visual = cv2.normalize(depth_map, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
+        cv2.imwrite(save_path, depth_visual)
+        return depth_visual
+
 
 if __name__ == "__main__":
     depth_estimator = DepthEstimator(use_hailo=True)  # Включаем Hailo-8
-    print("🔄 Потоки инференса успешно созданы! Готовимся к тесту...")
+    depth_map = depth_estimator.compute_depth("data/images/left/left_00.jpg", "data/images/right/right_00.jpg")
+
+    # Отображение результата
+    cv2.imshow("Depth Map", depth_map)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+    print("✅ Карта глубины сохранена в data/images/depth_map.png")
