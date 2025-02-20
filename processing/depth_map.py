@@ -110,6 +110,10 @@ class DepthEstimator:
         print(f"Размер disparity map перед ресайзом: {disparity.shape}")
         print(f"Размер disparity map после ресайза: {depth_visual.shape}")
 
+        depth_overlay = cv2.addWeighted(imgL, 0.5, depth_visual, 0.5, 0)
+        cv2.imshow("Overlay Depth on Original", depth_overlay)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
 
         cv2.imwrite(save_path, depth_visual)
 
