@@ -20,18 +20,18 @@ class DepthEstimator:
         if use_hailo:
             self.vdevice = hp.VDevice()
             self.hef = hp.HEF(hef_path)
-            self.network_groups = self.vdevice.configure(self.hef)
+            configure_params = hp.ConfigureParams.create_from_hef(self.hef, interface=hp.HailoStreamInterface.PCIe)
+            self.network_groups = self.vdevice.configure(self.hef, configure_params)
             self.configured_network = self.network_groups[0]  # Берём первую (и единственную) сеть
 
-            # Преобразуем VStreamInfo в VStreamParams
-            input_vstreams_params = {vstream.name: hp.InputVStreamParams.from_vstream_info(vstream)
-                                     for vstream in self.configured_network.get_input_vstream_infos()}
-            output_vstreams_params = {vstream.name: hp.OutputVStreamParams.from_vstream_info(vstream)
-                                      for vstream in self.configured_network.get_output_vstream_infos()}
+            # Создаём параметры потоков через make_from_network_group
+            self.input_vstreams_params = hp.InputVStreamParams.make_from_network_group(self.configured_network)
+            self.output_vstreams_params = hp.OutputVStreamParams.make_from_network_group(self.configured_network,
+                                                                                         format_type=hp.FormatType.FLOAT32)
 
             # Создаём потоки для инференса
-            self.infer_vstreams = hp.InferVStreams(self.configured_network, input_vstreams_params,
-                                                   output_vstreams_params)
+            self.infer_vstreams = hp.InferVStreams(self.configured_network, self.input_vstreams_params,
+                                                   self.output_vstreams_params)
 
             print("✅ Hailo-8 успешно подключен. Потоки инференса созданы.")
         else:
@@ -63,9 +63,11 @@ class DepthEstimator:
             input_tensor = np.stack((imgL_resized, imgR_resized), axis=0).astype(np.float32) / 255.0
 
             # Запуск инференса на Hailo-8
-            output_data = self.infer_vstreams.infer(
-                {"stereonet/input_layer1": input_tensor[0], "stereonet/input_layer2": input_tensor[1]})
-            disparity = output_data["stereonet/conv53"]
+            with self.infer_vstreams as infer_pipeline:
+                with self.configured_network.activate():
+                    output_data = infer_pipeline.infer(
+                        {"stereonet/input_layer1": input_tensor[0], "stereonet/input_layer2": input_tensor[1]})
+                    disparity = output_data["stereonet/conv53"]
 
             # Масштабируем disparity обратно к оригинальному разрешению
             disparity = cv2.resize(disparity, (imgL.shape[1], imgL.shape[0]), interpolation=cv2.INTER_LINEAR)
