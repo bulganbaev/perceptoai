@@ -18,7 +18,7 @@ class DepthEstimator:
         self.baseline = np.linalg.norm(self.T)
 
         # Вычисляем матрицы ремапинга
-        img_width, img_height = 1232, 368
+        img_width, img_height = 1280, 720  # Полное разрешение камер
         self.R1, self.R2, self.P1, self.P2, self.Q, _, _ = cv2.stereoRectify(
             self.mtxL, self.distL, self.mtxR, self.distR, (img_width, img_height), self.R, self.T, alpha=1)
 
@@ -76,11 +76,11 @@ class DepthEstimator:
 
         if self.use_hailo:
             imgL_resized = np.ascontiguousarray(
-                cv2.cvtColor(cv2.resize(imgL_rect, (1232, 368)), cv2.COLOR_GRAY2RGB).astype(np.uint8)).reshape(1, 368,
-                                                                                                               1232, 3)
+                cv2.cvtColor(cv2.resize(imgL_rect, (1280, 720)), cv2.COLOR_GRAY2RGB).astype(np.uint8)).reshape(1, 720,
+                                                                                                               1280, 3)
             imgR_resized = np.ascontiguousarray(
-                cv2.cvtColor(cv2.resize(imgR_rect, (1232, 368)), cv2.COLOR_GRAY2RGB).astype(np.uint8)).reshape(1, 368,
-                                                                                                               1232, 3)
+                cv2.cvtColor(cv2.resize(imgR_rect, (1280, 720)), cv2.COLOR_GRAY2RGB).astype(np.uint8)).reshape(1, 720,
+                                                                                                               1280, 3)
 
             input_data = {"stereonet/input_layer1": imgL_resized, "stereonet/input_layer2": imgR_resized}
 
