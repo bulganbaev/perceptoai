@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 import hailo_platform as hp
 
+
 class ObjectDetector:
     def __init__(self, model_path="data/models/yolov11s.hef", use_hailo=True):
         self.model_w, self.model_h = 640, 640  # Размер входа YOLO
@@ -55,7 +56,11 @@ class ObjectDetector:
 
     def process_yolo_output(self, yolo_output, img_w=640, img_h=640, conf_thresh=0.5):
         """Обрабатывает выход YOLOv11s и возвращает боксы в пикселях."""
-        detections = yolo_output[0]  # YOLO возвращает список из 1 элемента
+        if not isinstance(yolo_output, list) or len(yolo_output) == 0:
+            print("❌ YOLOv11s вернул пустой список!")
+            return []
+
+        detections = yolo_output[0]  # YOLO возвращает список массивов, берем первый
 
         if isinstance(detections, np.ndarray) and detections.shape[-1] == 5:
             print("🎯 Данные в формате [x1, y1, x2, y2, score]")
@@ -72,7 +77,8 @@ class ObjectDetector:
 
             return filtered_boxes
         else:
-            print("❌ Неизвестный формат данных!")
+            print("❌ YOLOv11s выдал неожиданный формат! Проверяем содержимое:")
+            print(detections)
             return []
 
     def compute_detection(self, img_path):
@@ -90,4 +96,4 @@ class ObjectDetector:
 
 if __name__ == "__main__":
     detector = ObjectDetector()
-    detections = detector.compute_detection("data/images/left/left_00.jpg")
+    detections = detector.compute_detection("data/images/test_image.jpg")
