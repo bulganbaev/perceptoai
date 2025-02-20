@@ -6,7 +6,7 @@ inf = hd.HailoInference('data/models/yolov11s.hef')
 proc = hd.Processor(inf, 0.5)
 
 # Загружаем изображение
-img = cv2.imread('data/images/test_image.jpg')
+img = cv2.imread('data/images/left/left_00.jpg')
 
 # Обрабатываем изображение через модель
 detected = proc.process([img])
