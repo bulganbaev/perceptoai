@@ -1,6 +1,5 @@
 import cv2
 import numpy as np
-import time
 import hailo_platform as hp
 
 
@@ -64,12 +63,20 @@ class YOLOv11sDetector:
                 output_data = infer_pipeline.infer(input_data)
 
         print("\n📌 Анализ выходных данных:")
+
         for key, value in output_data.items():
-            print(f" - {key}: shape={value.shape}, dtype={value.dtype}")
+            if isinstance(value, list):  # Если это список, печатаем его длину
+                print(f" - {key}: list of {len(value)} elements")
+                if len(value) > 0 and isinstance(value[0], np.ndarray):
+                    print(f"   └─ Первый элемент: shape={value[0].shape}, dtype={value[0].dtype}")
+            elif isinstance(value, np.ndarray):
+                print(f" - {key}: shape={value.shape}, dtype={value.dtype}")
+            else:
+                print(f" - {key}: type={type(value)}")
 
         return output_data
 
 
 if __name__ == "__main__":
     detector = YOLOv11sDetector(use_hailo=True)
-    output_data = detector.infer("data/images/left/left_00.jpg")  # Укажи путь к изображению
+    output_data = detector.infer("data/images/test_image.jpg")  # Укажи путь к изображению
