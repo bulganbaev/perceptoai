@@ -51,20 +51,20 @@ class HEFAnalyzer:
         }
 
         print("\n=== Входные потоки ===")
-        for name, info in input_vstreams_info.items():
-            model_info["inputs"][name] = {
+        for info in input_vstreams_info:
+            model_info["inputs"][info.name] = {
                 "shape": info.shape,
                 "dtype": str(info.dtype)
             }
-            print(f"Name: {name}, Shape: {info.shape}, Data Type: {info.dtype}")
+            print(f"Name: {info.name}, Shape: {info.shape}, Data Type: {info.dtype}")
 
         print("\n=== Выходные потоки ===")
-        for name, info in output_vstreams_info.items():
-            model_info["outputs"][name] = {
+        for info in output_vstreams_info:
+            model_info["outputs"][info.name] = {
                 "shape": info.shape,
                 "dtype": str(info.dtype)
             }
-            print(f"Name: {name}, Shape: {info.shape}, Data Type: {info.dtype}")
+            print(f"Name: {info.name}, Shape: {info.shape}, Data Type: {info.dtype}")
 
         return model_info
 
