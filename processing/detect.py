@@ -68,13 +68,13 @@ class DepthEstimator:
         img_resized = cv2.resize(img, (640, 640))  # Размер входа для YOLO
         img_resized = np.ascontiguousarray(img_resized.astype(np.uint8)).reshape(1, 640, 640, 3)
 
-        input_data = {"yolo11s/input": img_resized}
+        input_data = {"yolov11s/input_layer1": img_resized}
 
         with self.infer_vstreams as infer_pipeline:
             with self.configured_network.activate():
                 output_data = infer_pipeline.infer(input_data)
 
-        detections = output_data.get("yolo11s/boxes")
+        detections = output_data.get("yolov11s/yolov8_nms_postprocess")
 
         if detections is None or detections.size == 0:
             print("❌ Объекты не найдены!")
