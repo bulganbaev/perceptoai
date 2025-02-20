@@ -17,8 +17,15 @@ class DepthEstimator:
         # Вычисляем baseline (расстояние между камерами)
         self.baseline = np.linalg.norm(self.T)
 
-        # Устанавливаем целевой размер изображений
-        self.target_size = (1232, 368)  # Размер, который принимает нейросеть
+        # Полное разрешение Full HD
+        img_width, img_height = 1920, 1080
+        self.R1, self.R2, self.P1, self.P2, self.Q, _, _ = cv2.stereoRectify(
+            self.mtxL, self.distL, self.mtxR, self.distR, (img_width, img_height), self.R, self.T, alpha=1)
+
+        self.mapL1, self.mapL2 = cv2.initUndistortRectifyMap(self.mtxL, self.distL, self.R1, self.P1,
+                                                             (img_width, img_height), cv2.CV_16SC2)
+        self.mapR1, self.mapR2 = cv2.initUndistortRectifyMap(self.mtxR, self.distR, self.R2, self.P2,
+                                                             (img_width, img_height), cv2.CV_16SC2)
 
         self.use_hailo = use_hailo
         if use_hailo:
@@ -61,21 +68,22 @@ class DepthEstimator:
         if imgL is None or imgR is None:
             raise ValueError("Ошибка загрузки изображений! Проверьте пути.")
 
-        # Масштабируем изображения без обрезки до нужного размера
-        imgL_resized = cv2.resize(imgL, self.target_size, interpolation=cv2.INTER_LINEAR)
-        imgR_resized = cv2.resize(imgR, self.target_size, interpolation=cv2.INTER_LINEAR)
+        # Ректификация на полном разрешении
+        imgL_rect = cv2.remap(imgL, self.mapL1, self.mapL2, cv2.INTER_LINEAR)
+        imgR_rect = cv2.remap(imgR, self.mapR1, self.mapR2, cv2.INTER_LINEAR)
 
-        cv2.imwrite("data/images/scaled_left.png", imgL_resized)
-        cv2.imwrite("data/images/scaled_right.png", imgR_resized)
+        cv2.imwrite("data/images/rectified_left.png", imgL_rect)
+        cv2.imwrite("data/images/rectified_right.png", imgR_rect)
 
         if self.use_hailo:
-            imgL_rgb = cv2.cvtColor(imgL_resized, cv2.COLOR_GRAY2RGB)
-            imgR_rgb = cv2.cvtColor(imgR_resized, cv2.COLOR_GRAY2RGB)
+            imgL_resized = np.ascontiguousarray(
+                cv2.cvtColor(cv2.resize(imgL_rect, (1232, 368)), cv2.COLOR_GRAY2RGB).astype(np.uint8)).reshape(1, 368,
+                                                                                                               1232, 3)
+            imgR_resized = np.ascontiguousarray(
+                cv2.cvtColor(cv2.resize(imgR_rect, (1232, 368)), cv2.COLOR_GRAY2RGB).astype(np.uint8)).reshape(1, 368,
+                                                                                                               1232, 3)
 
-            imgL_input = np.ascontiguousarray(imgL_rgb.astype(np.uint8)).reshape(1, 368, 1232, 3)
-            imgR_input = np.ascontiguousarray(imgR_rgb.astype(np.uint8)).reshape(1, 368, 1232, 3)
-
-            input_data = {"stereonet/input_layer1": imgL_input, "stereonet/input_layer2": imgR_input}
+            input_data = {"stereonet/input_layer1": imgL_resized, "stereonet/input_layer2": imgR_resized}
 
             with self.infer_vstreams as infer_pipeline:
                 with self.configured_network.activate():
@@ -86,8 +94,9 @@ class DepthEstimator:
                 raise ValueError("Ошибка: disparity пуст или не получен от модели!")
 
             disparity = np.squeeze(disparity)
+            disparity = cv2.resize(disparity, (imgL.shape[1], imgL.shape[0]), interpolation=cv2.INTER_LINEAR)
         else:
-            disparity = self.stereo.compute(imgL_resized, imgR_resized).astype(np.float32) / 16.0
+            disparity = self.stereo.compute(imgL_rect, imgR_rect).astype(np.float32) / 16.0
 
         disparity = cv2.medianBlur(disparity.astype(np.uint8), 5)
 
