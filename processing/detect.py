@@ -2,15 +2,14 @@ import cv2
 import numpy as np
 import hailo_platform as hp
 
+class ObjectDetector:
+    def __init__(self, model_path="data/models/yolov11s.hef", use_hailo=True):
+        self.model_w, self.model_h = 640, 640  # Размер входа YOLO
 
-class YOLOv11sDetector:
-    def __init__(self, use_hailo=True, hef_path="data/models/yolov11s.hef"):
-        self.model_w, self.model_h = 640, 640  # Размер входа YOLOv11s
         self.use_hailo = use_hailo
-
         if use_hailo:
             self.vdevice = hp.VDevice()
-            self.hef = hp.HEF(hef_path)
+            self.hef = hp.HEF(model_path)
             configure_params = hp.ConfigureParams.create_from_hef(self.hef, interface=hp.HailoStreamInterface.PCIe)
             self.network_groups = self.vdevice.configure(self.hef, configure_params)
             self.configured_network = self.network_groups[0]
@@ -26,79 +25,69 @@ class YOLOv11sDetector:
                                                    self.output_vstreams_params)
 
             print("✅ Hailo-8 успешно подключен. YOLOv11s загружен.")
-            print("\n📌 Входные потоки:")
-            for stream in self.input_vstream_infos:
-                print(f" - {stream.name}")
 
-            print("\n📌 Выходные потоки:")
-            for stream in self.output_vstream_infos:
-                print(f" - {stream.name}")
-
-    def preprocess_with_padding(self, img_path):
-        """Загружает и подготавливает изображение с паддингом"""
-        img = cv2.imread(img_path)
-        if img is None:
-            raise ValueError(f"Ошибка загрузки изображения: {img_path}")
-
-        img_h, img_w, _ = img.shape
+    def preprocess_image(self, image):
+        """Подготовка изображения: ресайз с паддингами."""
+        img_h, img_w, _ = image.shape
         scale = min(self.model_w / img_w, self.model_h / img_h)
         new_w, new_h = int(img_w * scale), int(img_h * scale)
+        image_resized = cv2.resize(image, (new_w, new_h))
 
-        img_resized = cv2.resize(img, (new_w, new_h))
-        img_padded = np.zeros((self.model_h, self.model_w, 3), dtype=np.uint8)
+        padded_image = np.zeros((self.model_h, self.model_w, 3), dtype=np.uint8)
+        offset_w = (self.model_w - new_w) // 2
+        offset_h = (self.model_h - new_h) // 2
+        padded_image[offset_h:offset_h + new_h, offset_w:offset_w + new_w, :] = image_resized
 
-        x_offset = (self.model_w - new_w) // 2
-        y_offset = (self.model_h - new_h) // 2
-        img_padded[y_offset:y_offset + new_h, x_offset:x_offset + new_w, :] = img_resized
+        return padded_image
 
-        return np.ascontiguousarray(img_padded.astype(np.uint8)).reshape(1, 640, 640, 3)
+    def detect_objects(self, img):
+        """Запускает YOLOv11s на Hailo и парсит результат."""
+        img_padded = self.preprocess_image(img)
+        img_input = np.ascontiguousarray(img_padded.astype(np.uint8)).reshape(1, 640, 640, 3)
 
-    def infer(self, img_path):
-        """Выполняет инференс и анализирует выходные данные"""
-        img_preprocessed = self.preprocess_with_padding(img_path)
-        input_data = {"yolov11s/input_layer1": img_preprocessed}
+        input_data = {"yolov11s/input_layer1": img_input}
 
         with self.infer_vstreams as infer_pipeline:
             with self.configured_network.activate():
                 output_data = infer_pipeline.infer(input_data)
 
-        print("\n📌 Анализ выходных данных:")
+        return output_data["yolov11s/yolov8_nms_postprocess"]
 
-        for key, value in output_data.items():
-            if isinstance(value, list):  # Если список, проверяем содержимое
-                print(f" - {key}: list of {len(value)} elements")
-                print(value)
-                if len(value) > 0 and isinstance(value[0], np.ndarray):
-                    print(f"   └─ Первый элемент: shape={value[0].shape}, dtype={value[0].dtype}")
-                    self.parse_yolo_output(value[0])  # Разбираем YOLO-выход
-            elif isinstance(value, np.ndarray):
-                print(f" - {key}: shape={value.shape}, dtype={value.dtype}")
-            else:
-                print(f" - {key}: type={type(value)}")
+    def process_yolo_output(self, yolo_output, img_w=640, img_h=640, conf_thresh=0.5):
+        """Обрабатывает выход YOLOv11s и возвращает боксы в пикселях."""
+        detections = yolo_output[0]  # YOLO возвращает список из 1 элемента
 
-        return output_data
+        if isinstance(detections, np.ndarray) and detections.shape[-1] == 5:
+            print("🎯 Данные в формате [x1, y1, x2, y2, score]")
 
-    def parse_yolo_output(self, yolo_output):
-        """Разбирает выходные данные YOLOv11s"""
-        print("\n📌 Разбор выходных данных YOLOv11s:")
+            # Фильтруем боксы по confidence
+            filtered_boxes = detections[detections[:, 4] > conf_thresh]
 
-        if yolo_output.shape[-1] == 5:
-            print("🎯 Данные в формате [x1, y1, x2, y2, score] (Bounding Boxes)")
+            # Конвертируем из нормализованных [0,1] в пиксели
+            filtered_boxes[:, [0, 2]] *= img_w  # x1, x2 → пиксели
+            filtered_boxes[:, [1, 3]] *= img_h  # y1, y2 → пиксели
 
-            # Выбираем только боксы с высоким score
-            threshold = 0.5
-            high_conf_boxes = yolo_output[yolo_output[:, 4] > threshold]
+            print(f"✅ Найдено {filtered_boxes.shape[0]} объектов с conf > {conf_thresh}")
+            print(filtered_boxes)
 
-            if len(high_conf_boxes) > 0:
-                print(f"✅ Оставлено {len(high_conf_boxes)} боксов с conf > {threshold}:")
-                print(high_conf_boxes)
-            else:
-                print("❌ Нет боксов с высоким confidence!")
-
+            return filtered_boxes
         else:
-            print("❓ Неизвестный формат выходных данных:", yolo_output.shape)
+            print("❌ Неизвестный формат данных!")
+            return []
+
+    def compute_detection(self, img_path):
+        """Запускает полный пайплайн детекции."""
+        img = cv2.imread(img_path)
+        if img is None:
+            raise ValueError("Ошибка загрузки изображения!")
+
+        print("📌 Запускаем детекцию объектов...")
+        raw_output = self.detect_objects(img)
+        processed_boxes = self.process_yolo_output(raw_output)
+
+        return processed_boxes
 
 
 if __name__ == "__main__":
-    detector = YOLOv11sDetector(use_hailo=True)
-    output_data = detector.infer("data/images/test_image.jpg")  # Укажи путь к изображению
+    detector = ObjectDetector()
+    detections = detector.compute_detection("data/images/left/left_00.jpg")
