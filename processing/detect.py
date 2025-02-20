@@ -76,7 +76,7 @@ class DepthEstimator:
 
         detections = output_data.get("yolov11s/yolov8_nms_postprocess")
 
-        if detections is None or detections.size == 0:
+        if not detections or len(detections) == 0:
             print("❌ Объекты не найдены!")
             return []
 
