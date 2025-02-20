@@ -4,7 +4,6 @@ import os
 import time
 import hailo_platform as hp
 
-
 class DepthEstimator:
     def __init__(self, calib_path="data/calibration/calibration_data.npz", use_hailo=True,
                  hef_path="data/models/stereonet.hef"):
@@ -76,7 +75,8 @@ class DepthEstimator:
         cv2.imwrite("data/images/rectified_right.png", imgR_rect)
 
         # Создаем маску валидных пикселей (не черных зон)
-        mask = (cv2.cvtColor(imgL_rect, cv2.COLOR_BGR2GRAY) > 0).astype(np.uint8)
+        gray_mask = cv2.cvtColor(imgL_rect, cv2.COLOR_BGR2GRAY)
+        mask = (gray_mask > 10).astype(np.uint8)  # Оставляем только значимые пиксели
 
         if self.use_hailo:
             imgL_resized = np.ascontiguousarray(cv2.resize(imgL_rect, (1232, 368)).astype(np.uint8)).reshape(1, 368,
@@ -112,7 +112,6 @@ class DepthEstimator:
         elapsed_time = time.time() - start_time
         print(f"⏱ Время выполнения: {elapsed_time:.4f} сек")
         return depth_visual
-
 
 if __name__ == "__main__":
     depth_estimator = DepthEstimator(use_hailo=True)
