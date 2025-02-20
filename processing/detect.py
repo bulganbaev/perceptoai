@@ -4,28 +4,23 @@ import hailo_platform as hp
 
 
 class ObjectDetector:
-    def __init__(self, model_path="data/models/yolov11s.hef", use_hailo=True):
+    def __init__(self, model_path="data/models/yolov11s.hef"):
         self.model_w, self.model_h = 640, 640  # Размер входа YOLO
 
-        self.use_hailo = use_hailo
-        if use_hailo:
-            self.vdevice = hp.VDevice()
-            self.hef = hp.HEF(model_path)
-            configure_params = hp.ConfigureParams.create_from_hef(self.hef, interface=hp.HailoStreamInterface.PCIe)
-            self.network_groups = self.vdevice.configure(self.hef, configure_params)
-            self.configured_network = self.network_groups[0]
+        self.vdevice = hp.VDevice()
+        self.hef = hp.HEF(model_path)
+        configure_params = hp.ConfigureParams.create_from_hef(self.hef, interface=hp.HailoStreamInterface.PCIe)
+        self.network_groups = self.vdevice.configure(self.hef, configure_params)
+        self.configured_network = self.network_groups[0]
 
-            self.input_vstream_infos = self.configured_network.get_input_vstream_infos()
-            self.output_vstream_infos = self.configured_network.get_output_vstream_infos()
+        self.input_vstreams_params = hp.InputVStreamParams.make_from_network_group(self.configured_network)
+        self.output_vstreams_params = hp.OutputVStreamParams.make_from_network_group(self.configured_network,
+                                                                                     format_type=hp.FormatType.FLOAT32)
 
-            self.input_vstreams_params = hp.InputVStreamParams.make_from_network_group(self.configured_network)
-            self.output_vstreams_params = hp.OutputVStreamParams.make_from_network_group(self.configured_network,
-                                                                                         format_type=hp.FormatType.FLOAT32)
+        self.infer_vstreams = hp.InferVStreams(self.configured_network, self.input_vstreams_params,
+                                               self.output_vstreams_params)
 
-            self.infer_vstreams = hp.InferVStreams(self.configured_network, self.input_vstreams_params,
-                                                   self.output_vstreams_params)
-
-            print("✅ Hailo-8 успешно подключен. YOLOv11s загружен.")
+        print("✅ Hailo-8 успешно подключен. YOLOv11s загружен.")
 
     def preprocess_image(self, image):
         """Подготовка изображения: ресайз с паддингами."""
@@ -97,4 +92,4 @@ class ObjectDetector:
 
 if __name__ == "__main__":
     detector = ObjectDetector()
-    detections = detector.compute_detection("data/images/test_image.jpg")
+    detections = detector.compute_detection("data/images/left/left_00.jpg")
