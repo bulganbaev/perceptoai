@@ -18,8 +18,8 @@ image_count = 0
 print("📸 Нажмите 's' для съемки, 'q' для выхода")
 try:
     while True:
-        frame1 = cam0.get_frame()
-        frame0 = cam1.get_frame()
+        frame0 = cam0.get_frame()
+        frame1 = cam1.get_frame()
 
         if frame0 is not None and frame1 is not None:
             combined = cv2.hconcat([frame0, frame1])
