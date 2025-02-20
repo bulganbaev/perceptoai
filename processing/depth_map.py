@@ -86,6 +86,11 @@ class DepthEstimator:
                 raise ValueError("Ошибка: disparity пуст или не получен от модели!")
 
             disparity = np.squeeze(disparity)
+            cv2.imshow("Disparity Map (Before Resize)",
+                       (disparity - disparity.min()) / (disparity.max() - disparity.min()))
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+
             disparity = cv2.resize(disparity, (imgL.shape[1], imgL.shape[0]), interpolation=cv2.INTER_LINEAR)
         else:
             # Ректификация на полном разрешении
@@ -101,6 +106,11 @@ class DepthEstimator:
 
         depth_visual = cv2.applyColorMap(cv2.normalize(depth_map, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U),
                                          cv2.COLORMAP_JET)
+        print(f"Размер оригинального изображения: {imgL.shape}")
+        print(f"Размер disparity map перед ресайзом: {disparity.shape}")
+        print(f"Размер disparity map после ресайза: {depth_visual.shape}")
+
+
         cv2.imwrite(save_path, depth_visual)
 
         elapsed_time = time.time() - start_time
