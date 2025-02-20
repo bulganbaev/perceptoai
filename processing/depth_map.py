@@ -62,12 +62,9 @@ class DepthEstimator:
 
         if self.use_hailo:
             # Преобразование к размеру модели
-            imgL_resized = cv2.resize(imgL, (1232, 368))
-            imgR_resized = cv2.resize(imgR, (1232, 368))
-            input_tensor = np.stack((imgL_resized, imgR_resized), axis=0).astype(np.float32)
-
-            # Преобразуем данные в uint8
-            input_tensor = (input_tensor * 255).astype(np.uint8)
+            imgL_resized = cv2.cvtColor(cv2.resize(imgL, (1232, 368)), cv2.COLOR_GRAY2RGB)
+            imgR_resized = cv2.cvtColor(cv2.resize(imgR, (1232, 368)), cv2.COLOR_GRAY2RGB)
+            input_tensor = np.stack((imgL_resized, imgR_resized), axis=0).astype(np.uint8)
 
             # Проверка соответствия размеров
             for vstream_info in self.input_vstream_infos:
