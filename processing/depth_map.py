@@ -91,6 +91,10 @@ class DepthEstimator:
                 raise ValueError("Ошибка: disparity пуст или не получен от модели!")
 
             print(f"📌 Disparity shape: {disparity.shape}")
+
+            # Преобразование disparity
+            disparity = np.squeeze(disparity)  # Убираем лишние оси (1, 368, 1232, 1) -> (368, 1232)
+
             # Масштабируем disparity обратно к оригинальному разрешению
             disparity = cv2.resize(disparity, (imgL.shape[1], imgL.shape[0]), interpolation=cv2.INTER_LINEAR)
         else:
