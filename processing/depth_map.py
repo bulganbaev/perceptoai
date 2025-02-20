@@ -67,16 +67,13 @@ class DepthEstimator:
         if imgL is None or imgR is None:
             raise ValueError("Ошибка загрузки изображений! Проверьте пути.")
 
-        # Ректификация на полном разрешении
-        imgL_rect = cv2.remap(imgL, self.mapL1, self.mapL2, cv2.INTER_LINEAR)
-        imgR_rect = cv2.remap(imgR, self.mapR1, self.mapR2, cv2.INTER_LINEAR)
 
-        cv2.imwrite("data/images/rectified_left.png", imgL_rect)
-        cv2.imwrite("data/images/rectified_right.png", imgR_rect)
+
+
 
         if self.use_hailo:
-            imgL_resized = np.ascontiguousarray(cv2.resize(imgL_rect, (1232, 368)).astype(np.uint8)).reshape(1, 368, 1232, 3)
-            imgR_resized = np.ascontiguousarray(cv2.resize(imgR_rect, (1232, 368)).astype(np.uint8)).reshape(1, 368, 1232, 3)
+            imgL_resized = np.ascontiguousarray(cv2.resize(imgL, (1232, 368)).astype(np.uint8)).reshape(1, 368, 1232, 3)
+            imgR_resized = np.ascontiguousarray(cv2.resize(imgR, (1232, 368)).astype(np.uint8)).reshape(1, 368, 1232, 3)
 
             input_data = {"stereonet/input_layer1": imgL_resized, "stereonet/input_layer2": imgR_resized}
 
@@ -91,6 +88,11 @@ class DepthEstimator:
             disparity = np.squeeze(disparity)
             disparity = cv2.resize(disparity, (imgL.shape[1], imgL.shape[0]), interpolation=cv2.INTER_LINEAR)
         else:
+            # Ректификация на полном разрешении
+            imgL_rect = cv2.remap(imgL, self.mapL1, self.mapL2, cv2.INTER_LINEAR)
+            imgR_rect = cv2.remap(imgR, self.mapR1, self.mapR2, cv2.INTER_LINEAR)
+            cv2.imwrite("data/images/rectified_left.png", imgL_rect)
+            cv2.imwrite("data/images/rectified_right.png", imgR_rect)
             disparity = self.stereo.compute(cv2.cvtColor(imgL_rect, cv2.COLOR_BGR2GRAY),
                                             cv2.cvtColor(imgR_rect, cv2.COLOR_BGR2GRAY)).astype(np.float32) / 16.0
 
