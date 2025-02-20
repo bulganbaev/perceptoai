@@ -79,7 +79,7 @@ class DepthEstimator:
         if not detections or len(detections) == 0:
             print("❌ Объекты не найдены!")
             return []
-
+        print(detections)
         return detections  # [x1, y1, x2, y2, score, class]
 
     def compute_detection(self, imgL_path, imgR_path):
