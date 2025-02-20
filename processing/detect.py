@@ -4,6 +4,7 @@ import os
 import time
 import hailo_platform as hp
 
+
 class DepthEstimator:
     def __init__(self, calib_path="data/calibration/calibration_data.npz", use_hailo=True,
                  hef_path="data/models/yolov8m_pose.hef"):
@@ -16,8 +17,10 @@ class DepthEstimator:
         self.R1, self.R2, self.P1, self.P2, self.Q, _, _ = cv2.stereoRectify(
             self.mtxL, self.distL, self.mtxR, self.distR, (1920, 1080), self.R, self.T, alpha=1)
 
-        self.mapL1, self.mapL2 = cv2.initUndistortRectifyMap(self.mtxL, self.distL, self.R1, self.P1, (1920, 1080), cv2.CV_16SC2)
-        self.mapR1, self.mapR2 = cv2.initUndistortRectifyMap(self.mtxR, self.distR, self.R2, self.P2, (1920, 1080), cv2.CV_16SC2)
+        self.mapL1, self.mapL2 = cv2.initUndistortRectifyMap(self.mtxL, self.distL, self.R1, self.P1, (1920, 1080),
+                                                             cv2.CV_16SC2)
+        self.mapR1, self.mapR2 = cv2.initUndistortRectifyMap(self.mtxR, self.distR, self.R2, self.P2, (1920, 1080),
+                                                             cv2.CV_16SC2)
 
         self.model_w, self.model_h = 640, 640
         self.use_hailo = use_hailo
@@ -44,6 +47,7 @@ class DepthEstimator:
         """
         Масштабирует изображения и центрирует их на черном фоне.
         """
+
         def resize_and_pad(image):
             img_h, img_w, _ = image.shape
             scale = min(self.model_w / img_w, self.model_h / img_h)
@@ -60,8 +64,6 @@ class DepthEstimator:
         imgR_padded = resize_and_pad(imgR)
 
         return imgL_padded, imgR_padded
-
-    import numpy as np
 
     def detect_objects(self, img):
         """
@@ -113,9 +115,15 @@ class DepthEstimator:
         print(f"📌 Оставлено {filtered_boxes.shape[0]} боксов после коррекции:")
         print(filtered_boxes)
 
+        return filtered_boxes
 
-
-        return None
+    def draw_boxes(self, image, boxes, color=(0, 255, 0)):
+        for box in boxes:
+            x1, y1, x2, y2, conf = box
+            cv2.rectangle(image, (int(x1), int(y1)), (int(x2), int(y2)), color, 2)
+            cv2.putText(image, f"{conf:.2f}", (int(x1), int(y1) - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+        return image
 
     def compute_detection(self, imgL_path, imgR_path):
         start_time = time.time()
@@ -142,22 +150,14 @@ class DepthEstimator:
         detections_left = self.detect_objects(imgL_padded)
         detections_right = self.detect_objects(imgR_padded)
 
-        # ✅ Рисуем bounding box'ы
-        for det in detections_left:
-            x1, y1, x2, y2, score, cls = det
-            cv2.rectangle(imgL_padded, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
-            cv2.putText(imgL_padded, f"ID:{int(cls)} {score:.2f}", (int(x1), int(y1 - 10)),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
-        for det in detections_right:
-            x1, y1, x2, y2, score, cls = det
-            cv2.rectangle(imgR_padded, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
-            cv2.putText(imgR_padded, f"ID:{int(cls)} {score:.2f}", (int(x1), int(y1 - 10)),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
-        # ✅ Сохраняем изображения с детекцией
-        cv2.imwrite("data/images/detected_left.png", imgL_padded)
-        cv2.imwrite("data/images/detected_right.png", imgR_padded)
+        imgL_drawn = self.draw_boxes(imgL_padded.copy(), detections_left)
+        cv2.imwrite("data/images/detected_left.png", imgL_drawn)
+
+        imgR_drawn = self.draw_boxes(imgL_padded.copy(), detections_right)
+        cv2.imwrite("data/images/detected_right.png", imgR_drawn)
+
         print("✅ Сохранены результаты детекции: detected_left.png, detected_right.png")
 
         elapsed_time = time.time() - start_time
