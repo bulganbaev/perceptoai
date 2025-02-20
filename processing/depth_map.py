@@ -83,6 +83,9 @@ class DepthEstimator:
 
         # Применяем корректный ресайз с центрированием
         imgL_padded, imgR_padded = self.preprocess_stereo(imgL, imgR)
+        cv2.imwrite("data/images/processed_left.png", imgL_padded)
+        cv2.imwrite("data/images/processed_right.png", imgR_padded)
+        print("✅ Сохранены изображения после препроцессинга: processed_left.png, processed_right.png")
 
         if self.use_hailo:
             imgL_resized = np.ascontiguousarray(imgL_padded.astype(np.uint8)).reshape(1, 368, 1232, 3)
