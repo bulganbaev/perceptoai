@@ -108,6 +108,8 @@ class DepthEstimator:
                        (disparity - disparity.min()) / (disparity.max() - disparity.min()))
             cv2.waitKey(0)
             cv2.destroyAllWindows()
+            cv2.imwrite("data/images/raw_disparity.png", disparity)
+            print(f"✅ Disparity map сохранена: data/images/raw_disparity.png")
 
             # Масштабируем disparity обратно
             disparity = cv2.resize(disparity, (imgL.shape[1], imgL.shape[0]), interpolation=cv2.INTER_NEAREST)
