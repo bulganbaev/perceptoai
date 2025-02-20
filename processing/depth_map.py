@@ -75,6 +75,9 @@ class DepthEstimator:
         cv2.imwrite("data/images/rectified_left.png", imgL_rect)
         cv2.imwrite("data/images/rectified_right.png", imgR_rect)
 
+        # Создаем маску валидных пикселей (не черных зон)
+        mask = (cv2.cvtColor(imgL_rect, cv2.COLOR_BGR2GRAY) > 0).astype(np.uint8)
+
         if self.use_hailo:
             imgL_resized = np.ascontiguousarray(cv2.resize(imgL_rect, (1232, 368)).astype(np.uint8)).reshape(1, 368,
                                                                                                              1232, 3)
@@ -97,7 +100,7 @@ class DepthEstimator:
             disparity = self.stereo.compute(cv2.cvtColor(imgL_rect, cv2.COLOR_BGR2GRAY),
                                             cv2.cvtColor(imgR_rect, cv2.COLOR_BGR2GRAY)).astype(np.float32) / 16.0
 
-        disparity = cv2.medianBlur(disparity.astype(np.uint8), 5)
+        disparity = disparity * mask  # Применяем маску к карте диспаритета
 
         focal_length = self.mtxL[0, 0]
         depth_map = (focal_length * self.baseline) / (disparity + 1e-6)
