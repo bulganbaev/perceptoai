@@ -18,7 +18,7 @@ class DepthEstimator:
         self.baseline = np.linalg.norm(self.T)
 
         # Вычисляем матрицы ремапинга
-        img_width, img_height = 1232, 368  # Размеры входных изображений
+        img_width, img_height = 1232, 368
         self.R1, self.R2, self.P1, self.P2, self.Q, _, _ = cv2.stereoRectify(
             self.mtxL, self.distL, self.mtxR, self.distR, (img_width, img_height), self.R, self.T, alpha=1)
 
@@ -35,16 +35,13 @@ class DepthEstimator:
             self.network_groups = self.vdevice.configure(self.hef, configure_params)
             self.configured_network = self.network_groups[0]
 
-            # Получаем информацию о входных потоках
             self.input_vstream_infos = self.configured_network.get_input_vstream_infos()
             self.output_vstream_infos = self.configured_network.get_output_vstream_infos()
 
-            # Создаём параметры потоков через make_from_network_group
             self.input_vstreams_params = hp.InputVStreamParams.make_from_network_group(self.configured_network)
             self.output_vstreams_params = hp.OutputVStreamParams.make_from_network_group(self.configured_network,
                                                                                          format_type=hp.FormatType.UINT8)
 
-            # Создаём потоки для инференса
             self.infer_vstreams = hp.InferVStreams(self.configured_network, self.input_vstreams_params,
                                                    self.output_vstreams_params)
 
@@ -97,10 +94,13 @@ class DepthEstimator:
         else:
             disparity = self.stereo.compute(imgL_rect, imgR_rect).astype(np.float32) / 16.0
 
+        disparity = cv2.medianBlur(disparity.astype(np.uint8), 5)
+
         focal_length = self.mtxL[0, 0]
         depth_map = (focal_length * self.baseline) / (disparity + 1e-6)
 
-        depth_visual = cv2.normalize(depth_map, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
+        depth_visual = cv2.applyColorMap(cv2.normalize(depth_map, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U),
+                                         cv2.COLORMAP_JET)
         cv2.imwrite(save_path, depth_visual)
 
         elapsed_time = time.time() - start_time
