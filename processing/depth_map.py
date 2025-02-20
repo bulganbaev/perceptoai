@@ -120,10 +120,10 @@ class DepthEstimator:
         cv2.imwrite("data/images/processed_left.png", imgL_padded)
         cv2.imwrite("data/images/processed_right.png", imgR_padded)
         print("✅ Сохранены изображения после препроцессинга: processed_left.png, processed_right.png")
-
+        imgL_resized = np.ascontiguousarray(imgL_padded.astype(np.uint8)).reshape(1, 368, 1232, 3)
+        imgR_resized = np.ascontiguousarray(imgR_padded.astype(np.uint8)).reshape(1, 368, 1232, 3)
         if self.use_hailo:
-            imgL_resized = np.ascontiguousarray(imgL_padded.astype(np.uint8)).reshape(1, 368, 1232, 3)
-            imgR_resized = np.ascontiguousarray(imgR_padded.astype(np.uint8)).reshape(1, 368, 1232, 3)
+
 
             input_data = {"stereonet/input_layer1": imgL_resized, "stereonet/input_layer2": imgR_resized}
 
@@ -142,7 +142,7 @@ class DepthEstimator:
             print("✅ Сохранена raw disparity map: raw_disparity.png")
 
             # ✅ Масштабируем disparity обратно
-            disparity = cv2.resize(disparity, (imgL.shape[1], imgL.shape[0]), interpolation=cv2.INTER_NEAREST)
+            # disparity = cv2.resize(disparity, (imgL.shape[1], imgL.shape[0]), interpolation=cv2.INTER_NEAREST)
         else:
             disparity = self.stereo.compute(cv2.cvtColor(imgL_rect, cv2.COLOR_BGR2GRAY),
                                             cv2.cvtColor(imgR_rect, cv2.COLOR_BGR2GRAY)).astype(np.float32) / 16.0
@@ -159,7 +159,7 @@ class DepthEstimator:
         print(f"Размер disparity map после ресайза: {depth_visual.shape}")
 
         # ✅ Накладываем depth map на оригинальное изображение
-        depth_overlay = cv2.addWeighted(imgL, 0.5, depth_visual, 0.5, 0)
+        depth_overlay = cv2.addWeighted(imgL_resized, 0.5, depth_visual, 0.5, 0)
         cv2.imshow("Overlay Depth on Original", depth_overlay)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
