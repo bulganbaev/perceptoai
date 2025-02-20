@@ -18,12 +18,17 @@ class DepthEstimator:
 
         self.use_hailo = use_hailo
         if use_hailo:
-            self.device = hp.Device()
+            self.vdevice = hp.VDevice()
             self.hef = hp.HEF(hef_path)
-            self.network_group = self.device.configure(self.hef)
-            print("✅ Hailo-8 успешно подключен. Модель загружена.")
-            print("ℹ️ Информация о сети:")
-            print(self.network_group.get_network_info())
+            self.network_groups = self.vdevice.configure(self.hef)
+            self.configured_network = self.network_groups[0]  # Берём первую (и единственную) сеть
+
+            # Создаём потоки
+            self.input_vstreams = hp.InputVStreams(self.configured_network,
+                                                   ["stereonet/input_layer1", "stereonet/input_layer2"])
+            self.output_vstreams = hp.OutputVStreams(self.configured_network, ["stereonet/conv53"])
+
+            print("✅ Hailo-8 успешно подключен. Потоки созданы.")
         else:
             # Создаем SGBM стерео-пару
             self.stereo = cv2.StereoSGBM_create(
@@ -41,4 +46,4 @@ class DepthEstimator:
 
 if __name__ == "__main__":
     depth_estimator = DepthEstimator(use_hailo=True)  # Включаем Hailo-8
-    print("🔄 Проверяем загрузку модели на Hailo-8...")
+    print("🔄 Потоки инференса успешно созданы! Готовимся к тесту...")
