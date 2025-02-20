@@ -108,22 +108,17 @@ class DepthEstimator:
         imgL_rect = cv2.remap(imgL, self.mapL1, self.mapL2, cv2.INTER_LINEAR)
         imgR_rect = cv2.remap(imgR, self.mapR1, self.mapR2, cv2.INTER_LINEAR)
 
-        # ✅ Сохраняем ректифицированные изображения для анализа
-        cv2.imwrite("data/images/rectified_left.png", imgL_rect)
-        cv2.imwrite("data/images/rectified_right.png", imgR_rect)
-        print("✅ Сохранены ректифицированные изображения: rectified_left.png, rectified_right.png")
-
-        # ✅ Теперь применяем корректный ресайз с центрированием
+        # ✅ Теперь обрезаем по центру
         imgL_padded, imgR_padded = self.preprocess_stereo_crop(imgL_rect, imgR_rect)
 
         # ✅ Сохраняем изображения после препроцессинга
-        cv2.imwrite("data/images/processed_left.png", imgL_padded)
-        cv2.imwrite("data/images/processed_right.png", imgR_padded)
-        print("✅ Сохранены изображения после препроцессинга: processed_left.png, processed_right.png")
-        imgL_resized = np.ascontiguousarray(imgL_padded.astype(np.uint8)).reshape(1, 368, 1232, 3)
-        imgR_resized = np.ascontiguousarray(imgR_padded.astype(np.uint8)).reshape(1, 368, 1232, 3)
-        if self.use_hailo:
+        cv2.imwrite("data/images/cropped_left.png", imgL_padded)
+        cv2.imwrite("data/images/cropped_right.png", imgR_padded)
+        print("✅ Сохранены обрезанные изображения: cropped_left.png, cropped_right.png")
 
+        if self.use_hailo:
+            imgL_resized = np.ascontiguousarray(imgL_padded.astype(np.uint8)).reshape(1, 368, 1232, 3)
+            imgR_resized = np.ascontiguousarray(imgR_padded.astype(np.uint8)).reshape(1, 368, 1232, 3)
 
             input_data = {"stereonet/input_layer1": imgL_resized, "stereonet/input_layer2": imgR_resized}
 
@@ -137,12 +132,10 @@ class DepthEstimator:
 
             disparity = np.squeeze(disparity)
 
-            # ✅ Сохраняем disparity перед ресайзом
+            # ✅ Сохраняем disparity
             cv2.imwrite("data/images/raw_disparity.png", disparity / np.max(disparity) * 255)
             print("✅ Сохранена raw disparity map: raw_disparity.png")
 
-            # ✅ Масштабируем disparity обратно
-            # disparity = cv2.resize(disparity, (imgL.shape[1], imgL.shape[0]), interpolation=cv2.INTER_NEAREST)
         else:
             disparity = self.stereo.compute(cv2.cvtColor(imgL_rect, cv2.COLOR_BGR2GRAY),
                                             cv2.cvtColor(imgR_rect, cv2.COLOR_BGR2GRAY)).astype(np.float32) / 16.0
@@ -154,13 +147,10 @@ class DepthEstimator:
         depth_visual = cv2.applyColorMap(cv2.normalize(depth_map, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U),
                                          cv2.COLORMAP_JET)
 
-        print(f"Размер оригинального изображения: {imgL.shape}")
-        print(f"Размер disparity map перед ресайзом: {disparity.shape}")
-        print(f"Размер disparity map после ресайза: {depth_visual.shape}")
+        # ✅ Оверлей на обрезанную версию
+        depth_overlay = cv2.addWeighted(imgL_padded, 0.5, depth_visual, 0.5, 0)
 
-        # ✅ Накладываем depth map на оригинальное изображение
-        depth_overlay = cv2.addWeighted(imgL_resized, 0.5, depth_visual, 0.5, 0)
-        cv2.imshow("Overlay Depth on Original", depth_overlay)
+        cv2.imshow("Overlay Depth on Cropped", depth_overlay)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
 
