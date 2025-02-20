@@ -23,7 +23,9 @@ try:
 
         if frame0 is not None and frame1 is not None:
             combined = cv2.hconcat([frame0, frame1])
-            cv2.imshow("Stereo Capture", combined)
+            cv2.namedWindow("Dual Cameras", cv2.WINDOW_NORMAL)  # Делаем окно изменяемым
+            cv2.resizeWindow("Dual Cameras", 1920, 1080) 
+            cv2.imshow("Dual Cameras", combined)
 
         key = cv2.waitKey(1) & 0xFF
 

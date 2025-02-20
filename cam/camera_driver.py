@@ -14,8 +14,16 @@ class CameraDriver:
         self.thread = None
         self.picam = Picamera2(camera_id)
 
+        # Проверяем, поддерживается ли AfMode
+        controls = self.picam.camera_controls
+        control_params = {}
+
+        if "AfMode" in controls:
+            control_params["AfMode"] = 2 if autofocus else 0  # Включаем автофокус, если он есть
+
+        # Создаем конфигурацию камеры
         config = self.picam.create_still_configuration(main={'size': (self.width, self.height)},
-                                                       controls={"AfMode": 2 if autofocus else 0})
+                                                       controls=control_params)
         self.picam.configure(config)
 
     def start_camera(self):
@@ -59,6 +67,8 @@ if __name__ == "__main__":
 
             if frame0 is not None and frame1 is not None:
                 combined = np.hstack((frame0, frame1))  # Объединяем два изображения
+                cv2.namedWindow("Dual Cameras", cv2.WINDOW_NORMAL)  # Делаем окно изменяемым
+                cv2.resizeWindow("Dual Cameras", 960, 540) 
                 cv2.imshow("Dual Cameras", combined)
 
             if cv2.waitKey(1) & 0xFF == ord('q'):
@@ -69,3 +79,4 @@ if __name__ == "__main__":
     cam0.stop_camera()
     cam1.stop_camera()
     cv2.destroyAllWindows()
+
