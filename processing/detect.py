@@ -67,6 +67,7 @@ class YOLOv11sDetector:
         for key, value in output_data.items():
             if isinstance(value, list):  # Если список, проверяем содержимое
                 print(f" - {key}: list of {len(value)} elements")
+                print(value)
                 if len(value) > 0 and isinstance(value[0], np.ndarray):
                     print(f"   └─ Первый элемент: shape={value[0].shape}, dtype={value[0].dtype}")
                     self.parse_yolo_output(value[0])  # Разбираем YOLO-выход
