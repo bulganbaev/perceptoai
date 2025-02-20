@@ -19,6 +19,7 @@ class DepthEstimator:
         self.mapL1, self.mapL2 = cv2.initUndistortRectifyMap(self.mtxL, self.distL, self.R1, self.P1, (1920, 1080), cv2.CV_16SC2)
         self.mapR1, self.mapR2 = cv2.initUndistortRectifyMap(self.mtxR, self.distR, self.R2, self.P2, (1920, 1080), cv2.CV_16SC2)
 
+        self.model_w, self.model_h = 640, 640
         self.use_hailo = use_hailo
         if use_hailo:
             self.vdevice = hp.VDevice()
