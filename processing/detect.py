@@ -33,7 +33,7 @@ class DepthEstimator:
 
             self.input_vstreams_params = hp.InputVStreamParams.make_from_network_group(self.configured_network)
             self.output_vstreams_params = hp.OutputVStreamParams.make_from_network_group(self.configured_network,
-                                                                                         format_type=hp.FormatType.UINT8)
+                                                                                         format_type=hp.FormatType.FLOAT32)
 
             self.infer_vstreams = hp.InferVStreams(self.configured_network, self.input_vstreams_params,
                                                    self.output_vstreams_params)
