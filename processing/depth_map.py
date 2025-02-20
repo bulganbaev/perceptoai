@@ -23,12 +23,10 @@ class DepthEstimator:
             self.network_groups = self.vdevice.configure(self.hef)
             self.configured_network = self.network_groups[0]  # Берём первую (и единственную) сеть
 
-            # Создаём потоки
-            self.input_vstreams = hp.InputVStreams(self.configured_network,
-                                                   ["stereonet/input_layer1", "stereonet/input_layer2"])
-            self.output_vstreams = hp.OutputVStreams(self.configured_network, ["stereonet/conv53"])
+            # Создаём потоки для инференса
+            self.infer_vstreams = hp.InferVStreams(self.configured_network)
 
-            print("✅ Hailo-8 успешно подключен. Потоки созданы.")
+            print("✅ Hailo-8 успешно подключен. Потоки инференса созданы.")
         else:
             # Создаем SGBM стерео-пару
             self.stereo = cv2.StereoSGBM_create(
@@ -57,10 +55,9 @@ class DepthEstimator:
             imgR_resized = cv2.resize(imgR, (1232, 368))
             input_tensor = np.stack((imgL_resized, imgR_resized), axis=0).astype(np.float32) / 255.0
 
-            # Отправка данных в Hailo-8
-            self.input_vstreams.write([input_tensor[0], input_tensor[1]])
-            output_data = self.output_vstreams.read()
-            disparity = output_data[0]
+            # Запуск инференса на Hailo-8
+            output_data = self.infer_vstreams.infer([input_tensor[0], input_tensor[1]])
+            disparity = output_data["stereonet/conv53"]
 
             # Масштабируем disparity обратно к оригинальному разрешению
             disparity = cv2.resize(disparity, (imgL.shape[1], imgL.shape[0]), interpolation=cv2.INTER_LINEAR)
