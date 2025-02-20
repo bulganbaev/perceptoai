@@ -70,31 +70,17 @@ class DepthEstimator:
         img_resized = cv2.resize(img, (640, 640))  # Размер входа для YOLO
         img_resized = np.ascontiguousarray(img_resized.astype(np.uint8)).reshape(1, 640, 640, 3)
 
-        input_data = {"yolov11s/input_layer1": img_resized}
+        input_data = {"yolov8m_pose/input_layer1": img_resized}
 
         with self.infer_vstreams as infer_pipeline:
             with self.configured_network.activate():
                 output_data = infer_pipeline.infer(input_data)
 
-        detections_raw = output_data.get("yolov11s/yolov8_nms_postprocess")
+        print("📌 Доступные выходные данные YOLOv8m-Pose:")
+        for key, value in output_data.items():
+            print(f" - {key}: shape={value.shape if isinstance(value, np.ndarray) else 'unknown'}")
 
-        if not detections_raw:
-            print("❌ Объекты не найдены!")
-            return []
-
-        # ✅ Фильтруем только массивы `numpy`, игнорируем пустые списки
-        filtered_detections = [np.array(det) for det in detections_raw if isinstance(det, np.ndarray) and len(det) > 0]
-
-        if len(filtered_detections) == 0:
-            print("❌ Объекты не найдены после фильтрации!")
-            return []
-
-        # ✅ Объединяем все найденные объекты в один массив
-        detections = np.vstack(filtered_detections)
-
-        print(f"✅ Найдено объектов: {detections.shape[0]}")
-
-        return detections  # [x1, y1, x2, y2, score, class]
+        return None
 
     def compute_detection(self, imgL_path, imgR_path):
         start_time = time.time()
