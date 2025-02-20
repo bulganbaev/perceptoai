@@ -90,8 +90,30 @@ class DepthEstimator:
         threshold = 0.5  # Можешь менять, если боксов мало/много
         filtered_boxes = bboxes[bboxes[..., 4] > threshold]
 
-        print(f"📌 Оставлено {filtered_boxes.shape[0]} боксов с conf > {threshold}")
+        # YOLO выдаёт x_center, y_center, width, height в нормализованных координатах
+        # Нам надо перевести их в пиксели
+        img_width, img_height = 640, 640  # Размер входа модели (убедись, что совпадает!)
+        filtered_boxes[:, 0] *= img_width  # x_center → пиксели
+        filtered_boxes[:, 1] *= img_height  # y_center → пиксели
+        filtered_boxes[:, 2] *= img_width  # width → пиксели
+        filtered_boxes[:, 3] *= img_height  # height → пиксели
+
+        # Конвертируем из (x_center, y_center, width, height) → (x1, y1, x2, y2)
+        filtered_boxes[:, 0] -= filtered_boxes[:, 2] / 2  # x1 = x_center - width/2
+        filtered_boxes[:, 1] -= filtered_boxes[:, 3] / 2  # y1 = y_center - height/2
+        filtered_boxes[:, 2] += filtered_boxes[:, 0]  # x2 = x1 + width
+        filtered_boxes[:, 3] += filtered_boxes[:, 1]  # y2 = y1 + height
+
+        # Убираем боксы, которые выходят за границы изображения
+        filtered_boxes = filtered_boxes[
+            (filtered_boxes[:, 0] >= 0) & (filtered_boxes[:, 1] >= 0) &
+            (filtered_boxes[:, 2] <= img_width) & (filtered_boxes[:, 3] <= img_height)
+            ]
+
+        print(f"📌 Оставлено {filtered_boxes.shape[0]} боксов после коррекции:")
         print(filtered_boxes)
+
+
 
         return None
 
