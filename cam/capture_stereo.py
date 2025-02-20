@@ -18,8 +18,8 @@ image_count = 0
 print("📸 Нажмите 's' для съемки, 'q' для выхода")
 try:
     while True:
-        frame0 = cam0.get_frame()
-        frame1 = cam1.get_frame()
+        frame1 = cam0.get_frame()
+        frame0 = cam1.get_frame()
 
         if frame0 is not None and frame1 is not None:
             combined = cv2.hconcat([frame0, frame1])
@@ -33,8 +33,8 @@ try:
             filename_left = f"data/images/left/left_{image_count:02d}.jpg"
             filename_right = f"data/images/right/right_{image_count:02d}.jpg"
 
-            cv2.imwrite(filename_left, frame1)
-            cv2.imwrite(filename_right, frame0)
+            cv2.imwrite(filename_left, frame0)
+            cv2.imwrite(filename_right, frame1)
 
             print(f"✅ Снимок сохранен: {filename_left}, {filename_right}")
             image_count += 1
