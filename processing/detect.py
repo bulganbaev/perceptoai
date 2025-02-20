@@ -76,8 +76,22 @@ class DepthEstimator:
             with self.configured_network.activate():
                 output_data = infer_pipeline.infer(input_data)
 
-        boxes = output_data["yolov8m_pose/conv59"]  # Основной выход для bbox
-        print(f"📌 Найдено боксов: {boxes.shape}")
+        boxes = output_data["yolov8m_pose/conv59"]  # Bounding boxes
+        boxes = np.squeeze(boxes)  # Убираем batch dim (1, 80, 80, 64) → (80, 80, 64)
+
+        # YOLO хранит bbox в виде feature map, нам нужно вытащить только нужные данные
+        num_classes = 1  # YOLOv8 Pose обычно не использует классы (0 - человек)
+        num_bbox_params = 5  # x_center, y_center, width, height, confidence
+
+        # Оставляем только bbox-данные
+        bboxes = boxes[..., :num_bbox_params]  # Берём первые 5 каналов
+
+        # Фильтруем боксы с высоким confidence
+        threshold = 0.5  # Можешь менять, если боксов мало/много
+        filtered_boxes = bboxes[bboxes[..., 4] > threshold]
+
+        print(f"📌 Оставлено {filtered_boxes.shape[0]} боксов с conf > {threshold}")
+        print(filtered_boxes)
 
         return None
 
