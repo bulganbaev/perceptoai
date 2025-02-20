@@ -71,6 +71,9 @@ class DepthEstimator:
         imgL_rect = cv2.remap(imgL, self.mapL1, self.mapL2, cv2.INTER_LINEAR)
         imgR_rect = cv2.remap(imgR, self.mapR1, self.mapR2, cv2.INTER_LINEAR)
 
+        cv2.imwrite("data/images/rectified_left.png", imgL_rect)
+        cv2.imwrite("data/images/rectified_right.png", imgR_rect)
+
         if self.use_hailo:
             imgL_resized = np.ascontiguousarray(
                 cv2.cvtColor(cv2.resize(imgL_rect, (1232, 368)), cv2.COLOR_GRAY2RGB).astype(np.uint8)).reshape(1, 368,
