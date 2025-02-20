@@ -85,8 +85,12 @@ class DepthEstimator:
             with self.infer_vstreams as infer_pipeline:
                 with self.configured_network.activate():
                     output_data = infer_pipeline.infer(input_data)
-                    disparity = output_data["stereonet/conv53"]
+                    disparity = output_data.get("stereonet/conv53")
 
+            if disparity is None or disparity.size == 0:
+                raise ValueError("Ошибка: disparity пуст или не получен от модели!")
+
+            print(f"📌 Disparity shape: {disparity.shape}")
             # Масштабируем disparity обратно к оригинальному разрешению
             disparity = cv2.resize(disparity, (imgL.shape[1], imgL.shape[0]), interpolation=cv2.INTER_LINEAR)
         else:
