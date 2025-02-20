@@ -16,15 +16,8 @@ class DepthEstimator:
         # Вычисляем baseline (расстояние между камерами)
         self.baseline = np.linalg.norm(self.T)
 
-        # Полное разрешение Full HD
-        img_width, img_height = 1920, 1080
-        self.R1, self.R2, self.P1, self.P2, self.Q, _, _ = cv2.stereoRectify(
-            self.mtxL, self.distL, self.mtxR, self.distR, (img_width, img_height), self.R, self.T, alpha=1)
-
-        self.mapL1, self.mapL2 = cv2.initUndistortRectifyMap(self.mtxL, self.distL, self.R1, self.P1,
-                                                             (img_width, img_height), cv2.CV_16SC2)
-        self.mapR1, self.mapR2 = cv2.initUndistortRectifyMap(self.mtxR, self.distR, self.R2, self.P2,
-                                                             (img_width, img_height), cv2.CV_16SC2)
+        # Размер входа модели
+        self.model_w, self.model_h = 1232, 368  # Размер, требуемый StereoNet
 
         self.use_hailo = use_hailo
         if use_hailo:
@@ -58,6 +51,27 @@ class DepthEstimator:
                 speckleRange=32
             )
 
+    def preprocess_stereo(self, imgL, imgR):
+        """
+        Масштабирует изображения и центрирует их на черном фоне.
+        """
+        def resize_and_pad(image):
+            img_h, img_w, _ = image.shape
+            scale = min(self.model_w / img_w, self.model_h / img_h)
+            new_img_w, new_img_h = int(img_w * scale), int(img_h * scale)
+            image_resized = cv2.resize(image, (new_img_w, new_img_h))
+
+            padded_image = np.zeros((self.model_h, self.model_w, 3), dtype=np.uint8)
+            pasted_w = (self.model_w - new_img_w) // 2
+            pasted_h = (self.model_h - new_img_h) // 2
+            padded_image[pasted_h:pasted_h + new_img_h, pasted_w:pasted_w + new_img_w, :] = image_resized
+            return padded_image
+
+        imgL_padded = resize_and_pad(imgL)
+        imgR_padded = resize_and_pad(imgR)
+
+        return imgL_padded, imgR_padded
+
     def compute_depth(self, imgL_path, imgR_path, save_path="data/images/depth_map.png"):
         start_time = time.time()
 
@@ -67,13 +81,12 @@ class DepthEstimator:
         if imgL is None or imgR is None:
             raise ValueError("Ошибка загрузки изображений! Проверьте пути.")
 
-
-
-
+        # Применяем корректный ресайз с центрированием
+        imgL_padded, imgR_padded = self.preprocess_stereo(imgL, imgR)
 
         if self.use_hailo:
-            imgL_resized = np.ascontiguousarray(cv2.resize(imgL, (1232, 368)).astype(np.uint8)).reshape(1, 368, 1232, 3)
-            imgR_resized = np.ascontiguousarray(cv2.resize(imgR, (1232, 368)).astype(np.uint8)).reshape(1, 368, 1232, 3)
+            imgL_resized = np.ascontiguousarray(imgL_padded.astype(np.uint8)).reshape(1, 368, 1232, 3)
+            imgR_resized = np.ascontiguousarray(imgR_padded.astype(np.uint8)).reshape(1, 368, 1232, 3)
 
             input_data = {"stereonet/input_layer1": imgL_resized, "stereonet/input_layer2": imgR_resized}
 
@@ -86,30 +99,31 @@ class DepthEstimator:
                 raise ValueError("Ошибка: disparity пуст или не получен от модели!")
 
             disparity = np.squeeze(disparity)
+
+            # Визуализация disparity перед ресайзом
             cv2.imshow("Disparity Map (Before Resize)",
                        (disparity - disparity.min()) / (disparity.max() - disparity.min()))
             cv2.waitKey(0)
             cv2.destroyAllWindows()
 
-            disparity = cv2.resize(disparity, (imgL.shape[1], imgL.shape[0]), interpolation=cv2.INTER_LINEAR)
+            # Масштабируем disparity обратно
+            disparity = cv2.resize(disparity, (imgL.shape[1], imgL.shape[0]), interpolation=cv2.INTER_NEAREST)
         else:
-            # Ректификация на полном разрешении
-            imgL_rect = cv2.remap(imgL, self.mapL1, self.mapL2, cv2.INTER_LINEAR)
-            imgR_rect = cv2.remap(imgR, self.mapR1, self.mapR2, cv2.INTER_LINEAR)
-            cv2.imwrite("data/images/rectified_left.png", imgL_rect)
-            cv2.imwrite("data/images/rectified_right.png", imgR_rect)
-            disparity = self.stereo.compute(cv2.cvtColor(imgL_rect, cv2.COLOR_BGR2GRAY),
-                                            cv2.cvtColor(imgR_rect, cv2.COLOR_BGR2GRAY)).astype(np.float32) / 16.0
+            disparity = self.stereo.compute(cv2.cvtColor(imgL, cv2.COLOR_BGR2GRAY),
+                                            cv2.cvtColor(imgR, cv2.COLOR_BGR2GRAY)).astype(np.float32) / 16.0
 
         focal_length = self.mtxL[0, 0]
         depth_map = (focal_length * self.baseline) / (disparity + 1e-6)
 
+        # Генерируем визуализацию depth map
         depth_visual = cv2.applyColorMap(cv2.normalize(depth_map, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U),
                                          cv2.COLORMAP_JET)
+
         print(f"Размер оригинального изображения: {imgL.shape}")
         print(f"Размер disparity map перед ресайзом: {disparity.shape}")
         print(f"Размер disparity map после ресайза: {depth_visual.shape}")
 
+        # Накладываем depth map на оригинальное изображение
         depth_overlay = cv2.addWeighted(imgL, 0.5, depth_visual, 0.5, 0)
         cv2.imshow("Overlay Depth on Original", depth_overlay)
         cv2.waitKey(0)
