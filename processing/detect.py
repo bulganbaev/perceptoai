@@ -61,9 +61,11 @@ class DepthEstimator:
 
         return imgL_padded, imgR_padded
 
+    import numpy as np
+
     def detect_objects(self, img):
         """
-        Запускает детекцию объектов через YOLO11s на Hailo.
+        Запускает детекцию объектов через YOLO11s на Hailo и парсит результат.
         """
         img_resized = cv2.resize(img, (640, 640))  # Размер входа для YOLO
         img_resized = np.ascontiguousarray(img_resized.astype(np.uint8)).reshape(1, 640, 640, 3)
@@ -74,12 +76,21 @@ class DepthEstimator:
             with self.configured_network.activate():
                 output_data = infer_pipeline.infer(input_data)
 
-        detections = output_data.get("yolov11s/yolov8_nms_postprocess")
+        detections_raw = output_data.get("yolov11s/yolov8_nms_postprocess")
 
-        if not detections or len(detections) == 0:
+        if not detections_raw:
             print("❌ Объекты не найдены!")
             return []
-        print(detections)
+
+        # ✅ Фильтруем пустые массивы и объединяем в один `numpy` массив
+        detections = np.vstack([det for det in detections_raw if det.shape[0] > 0])
+
+        if detections.shape[0] == 0:
+            print("❌ Объекты не найдены после фильтрации!")
+            return []
+
+        print(f"✅ Найдено объектов: {detections.shape[0]}")
+
         return detections  # [x1, y1, x2, y2, score, class]
 
     def compute_detection(self, imgL_path, imgR_path):
