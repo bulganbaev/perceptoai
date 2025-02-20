@@ -60,7 +60,8 @@ class ObjectDetector:
             print("❌ YOLOv11s вернул пустой список!")
             return []
 
-        detections = yolo_output[0]  # YOLO возвращает список массивов, берем первый
+        # Берём первый массив (остальные пустые)
+        detections = yolo_output[0]
 
         if isinstance(detections, np.ndarray) and detections.shape[-1] == 5:
             print("🎯 Данные в формате [x1, y1, x2, y2, score]")
