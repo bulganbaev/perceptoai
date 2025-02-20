@@ -82,12 +82,15 @@ class DepthEstimator:
             print("❌ Объекты не найдены!")
             return []
 
-        # ✅ Фильтруем пустые массивы и объединяем в один `numpy` массив
-        detections = np.vstack([det for det in detections_raw if det.shape[0] > 0])
+        # ✅ Фильтруем только массивы `numpy`, игнорируем пустые списки
+        filtered_detections = [np.array(det) for det in detections_raw if isinstance(det, np.ndarray) and len(det) > 0]
 
-        if detections.shape[0] == 0:
+        if len(filtered_detections) == 0:
             print("❌ Объекты не найдены после фильтрации!")
             return []
+
+        # ✅ Объединяем все найденные объекты в один массив
+        detections = np.vstack(filtered_detections)
 
         print(f"✅ Найдено объектов: {detections.shape[0]}")
 
