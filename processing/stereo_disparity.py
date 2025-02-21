@@ -1,10 +1,8 @@
 import cv2
 import os
 import numpy as np
-from scipy.optimize import linear_sum_assignment  # Hungarian Algorithm
 from cam.camera_driver import CameraDriver
 from processing.hailo_detection import HailoInference, Processor
-
 
 # === 1. ЗАГРУЗКА ПАРАМЕТРОВ КАЛИБРОВКИ ===
 calib_data = np.load("data/calibration/calibration_data.npz")
@@ -23,7 +21,6 @@ print(f"🔧 Загрузка калибровки: baseline={BASELINE:.2f}mm, f
 models_dir = "data/models"
 
 
-
 def undistort_and_rectify(frame, mtx, dist):
     """Исправление искажений на изображении."""
     h, w = frame.shape[:2]
@@ -31,83 +28,54 @@ def undistort_and_rectify(frame, mtx, dist):
     return cv2.undistort(frame, mtx, dist, None, new_mtx)
 
 
-def compute_disparity(left_box, right_box):
-    """Вычисляет disparity между левым и правым bbox."""
-    center_L_x = (left_box[1] + left_box[3]) // 2  # X-координата центра bbox слева
-    center_R_x = (right_box[1] + right_box[3]) // 2  # X-координата центра bbox справа
+def track_optical_flow(frame_left, frame_right, left_boxes):
+    """Оптический поток для сопоставления объектов."""
+    gray_left = cv2.cvtColor(frame_left, cv2.COLOR_BGR2GRAY)
+    gray_right = cv2.cvtColor(frame_right, cv2.COLOR_BGR2GRAY)
 
-    height_L = left_box[2] - left_box[0]  # Высота объекта слева
-    height_R = right_box[2] - right_box[0]  # Высота объекта справа
+    # Берём центры bbox как точки для отслеживания
+    left_pts = np.array([[(x1 + x2) // 2, (y1 + y2) // 2] for (y1, x1, y2, x2) in left_boxes], dtype=np.float32)
 
-    # Если bbox очень высокий → берём только середину
-    if height_L > 100 or height_R > 100:
-        center_L_y = left_box[0] + height_L // 3  # 1/3 сверху
-        center_R_y = right_box[0] + height_R // 3  # 1/3 сверху
-    else:
-        center_L_y = (left_box[0] + left_box[2]) // 2  # Обычный центр
-        center_R_y = (right_box[0] + right_box[2]) // 2  # Обычный центр
+    if len(left_pts) == 0:
+        return []
 
-    disparity = max(1, abs(center_L_x - center_R_x))  # Избегаем деления на 0
-    return disparity, center_L_x, center_L_y
+    # Оптический поток Lucas-Kanade
+    right_pts, status, _ = cv2.calcOpticalFlowPyrLK(gray_left, gray_right, left_pts, None)
+
+    matches = []
+    for i, (new, status_flag) in enumerate(zip(right_pts, status)):
+        if status_flag:
+            matches.append((i, new))  # (индекс в левой камере, найденная точка в правой камере)
+
+    return matches
 
 
 def compute_depth(left_results, right_results, matches):
-    """Вычисление глубины с учетом disparity и реального объекта."""
+    """Вычисление глубины с учетом disparity."""
     depths = []
-    for i, j in matches:
-        left_box = left_results['absolute_boxes'][i]
-        right_box = right_results['absolute_boxes'][j]
-
-        disparity, obj_x, obj_y = compute_disparity(left_box, right_box)
-        depth = (FOCAL_LENGTH * BASELINE) / disparity  # Глубина в мм
-
-        depths.append((obj_x, obj_y, depth))  # (X, Y, Depth)
-
-    return depths
-
-
-def compute_iou(boxA, boxB):
-    """Вычисляет IoU между двумя bbox."""
-    (y1_A, x1_A, y2_A, x2_A) = boxA
-    (y1_B, x1_B, y2_B, x2_B) = boxB
-
-    x_left = max(x1_A, x1_B)
-    y_top = max(y1_A, y1_B)
-    x_right = min(x2_A, x2_B)
-    y_bottom = min(y2_A, y2_B)
-
-    intersection_area = max(0, x_right - x_left) * max(0, y_bottom - y_top)
-    boxA_area = (x2_A - x1_A) * (y2_A - y1_A)
-    boxB_area = (x2_B - x1_B) * (y2_B - y1_B)
-
-    iou = intersection_area / float(boxA_area + boxB_area - intersection_area) if (
-                                                                                              boxA_area + boxB_area - intersection_area) > 0 else 0
-    return iou
-
-
-def match_boxes(left_results, right_results, iou_threshold=0.9):
-    """Сопоставление bbox с помощью Hungarian Algorithm."""
     left_boxes = left_results['absolute_boxes']
     right_boxes = right_results['absolute_boxes']
 
-    if len(left_boxes) == 0 or len(right_boxes) == 0:
-        return []  # Если нет объектов, просто возвращаем пустой список
+    for i, right_pt in matches:
+        left_box = left_boxes[i]
 
-    cost_matrix = np.zeros((len(left_boxes), len(right_boxes)))
-
-    for i, left_box in enumerate(left_boxes):
+        # Ищем ближайший bbox в правой камере к найденной точке
+        best_match, min_dist = None, float('inf')
         for j, right_box in enumerate(right_boxes):
-            iou = compute_iou(left_box, right_box)
-            cost_matrix[i, j] = 1 - iou  # Чем ниже, тем лучше соответствие
+            center_R_x = (right_box[1] + right_box[3]) // 2  # Центр X bbox справа
+            dist = abs(center_R_x - right_pt[0])
 
-    row_ind, col_ind = linear_sum_assignment(cost_matrix)
+            if dist < min_dist:
+                min_dist, best_match = dist, j
 
-    matches = []
-    for i, j in zip(row_ind, col_ind):
-        if cost_matrix[i, j] < (1 - iou_threshold):
-            matches.append((i, j))
+        if best_match is not None:
+            right_box = right_boxes[best_match]
+            disparity = max(1, abs(left_box[1] - right_box[1]))  # Избегаем деления на 0
+            depth = (FOCAL_LENGTH * BASELINE) / disparity
 
-    return matches
+            depths.append((left_box[1], left_box[0], depth))  # (X, Y, Depth)
+
+    return depths
 
 
 def draw_boxes(image, results, color=(0, 255, 0)):
@@ -126,6 +94,7 @@ def draw_depth(image, depth_results):
     for x, y, d in depth_results:
         cv2.putText(image, f"Depth: {d:.1f} mm", (x, y), cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 255, 255), 3)
     return image
+
 
 def choose_model():
     """Выбираем модель перед запуском"""
@@ -172,7 +141,7 @@ try:
             detections = proc.process([frame_left, frame_right])
             result_left, result_right = detections[0], detections[1]
 
-            matches = match_boxes(result_left, result_right)
+            matches = track_optical_flow(frame_left, frame_right, result_left['absolute_boxes'])
             print(f"🔍 Matches found: {matches}")
 
             depth_results = compute_depth(result_left, result_right, matches)
