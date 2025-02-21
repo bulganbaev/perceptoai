@@ -111,9 +111,9 @@ try:
             processed_right = draw_boxes(frame_right, result_right, color=(255, 0, 0))
 
             for x, y, d in depth_results:
-                cv2.putText(processed_left, f"Depth: {d:.1f} mm", (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                cv2.putText(processed_left, f"Depth: {d:.1f} mm", (x, y), cv2.FONT_HERSHEY_SIMPLEX, 2,
                             (255, 255, 255), 2)
-                cv2.putText(processed_right, f"Depth: {d:.1f} mm", (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                cv2.putText(processed_right, f"Depth: {d:.1f} mm", (x, y), cv2.FONT_HERSHEY_SIMPLEX, 2,
                             (255, 255, 255), 2)
 
             # === 8. Вывод ===
