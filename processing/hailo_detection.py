@@ -2,6 +2,7 @@ import cv2
 from hailo_platform import (HEF, VDevice, HailoStreamInterface, InferVStreams, ConfigureParams,
                             InputVStreamParams, OutputVStreamParams, FormatType, HailoSchedulingAlgorithm)
 import numpy as np
+import time
 
 
 class LabelLoader:
@@ -256,6 +257,7 @@ class Processor:
         self.label_loader = inference.label_loader
 
     def process(self, images: list):
+        start_time = time.time()
         inf_images = []
         height, width, _ = self._inference.get_input_shape()
         preprocessed_images = []
@@ -274,4 +276,6 @@ class Processor:
             cv2.namedWindow("Camera", cv2.WINDOW_NORMAL)  # Делаем окно изменяемым
             cv2.resizeWindow("Camera", 960, 540)
             cv2.imshow("Camera", drawed)
+        elapsed_time = time.time() - start_time  # Вычисляем общее время выполнения
+        print(f"[INFO] Total elapsed time: {elapsed_time:.3f} seconds")
         return final_result
