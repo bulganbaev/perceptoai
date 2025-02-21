@@ -4,59 +4,51 @@ import numpy as np
 from cam.camera_driver import CameraDriver
 from processing.hailo_detection import HailoInference, Processor
 
-# Инициализация модели детекции для обеих камер
+# Инициализация модели детекции
 inf = HailoInference('data/models/yolov11s.hef', 'data/labels/coco.txt')
 proc = Processor(inf, conf=0.5)
 
-# Запуск стереокамер
-cam_left = CameraDriver(camera_id=0)
-cam_right = CameraDriver(camera_id=1)
+# Запуск одной камеры (например, левой)
+cam = CameraDriver(camera_id=0)
+cam.start_camera()
 
-cam_left.start_camera()
-cam_right.start_camera()
-
-print("🎥 Запуск стереопотока. Нажмите 'q' для выхода.")
+print("🎥 Запуск потока. Нажмите 'q' для выхода.")
 
 try:
     while True:
-        frame_left = cam_left.get_frame()
-        frame_right = cam_right.get_frame()
+        frame = cam.get_frame()
 
-        if frame_left is not None and frame_right is not None:
-            # Запуск детекции на обоих кадрах
-            detections = proc.process([frame_left, frame_right])
+        if frame is not None:
+            # Запуск детекции
+            detections = proc.process([frame])
+            print(detections)
 
-            filtered_frames = []
-            for i, frame in enumerate([frame_left, frame_right]):
-                result = detections[i]
+            # Фильтруем только class=0 (обычно это 'person' в COCO)
+            filtered_boxes = []
+            filtered_scores = []
+            filtered_classes = []
 
-                # Фильтруем только class=0 (обычно это 'person' в COCO)
-                filtered_boxes = []
-                filtered_scores = []
-                filtered_classes = []
+            result = detections[0]  # Обрабатываем первый кадр (только одна камера)
 
-                for j, class_id in enumerate(result['detection_classes']):
-                    if class_id == 0:  # Фильтруем только class=0
-                        filtered_boxes.append(result['absolute_boxes'][j])
-                        filtered_scores.append(result['detection_scores'][j])
-                        filtered_classes.append(class_id)
+            for i, class_id in enumerate(result['detection_classes']):
+                if class_id == 0:  # Фильтруем только class=0
+                    filtered_boxes.append(result['absolute_boxes'][i])
+                    filtered_scores.append(result['detection_scores'][i])
+                    filtered_classes.append(class_id)
 
-                # Обновляем результаты и рисуем боксы только для class=0
-                result.update({
-                    'absolute_boxes': filtered_boxes,
-                    'detection_classes': filtered_classes,
-                    'detection_scores': filtered_scores
-                })
+            # Обновляем результаты и рисуем боксы только для class=0
+            result.update({
+                'absolute_boxes': filtered_boxes,
+                'detection_classes': filtered_classes,
+                'detection_scores': filtered_scores
+            })
 
-                filtered_frames.append(proc.label_loader.draw_boxes(result))
-
-            # Объединяем обработанные кадры
-            combined_frame = cv2.hconcat(filtered_frames)
+            processed_frame = proc.label_loader.draw_boxes(result)
 
             # Отображение окна
-            cv2.namedWindow("Stereo Stream", cv2.WINDOW_NORMAL)
-            cv2.resizeWindow("Stereo Stream", 1920, 1080)
-            cv2.imshow("Stereo Stream", combined_frame)
+            cv2.namedWindow("Camera Stream", cv2.WINDOW_NORMAL)
+            cv2.resizeWindow("Camera Stream", 1280, 720)
+            cv2.imshow("Camera Stream", processed_frame)
 
         # Выход по 'q'
         if cv2.waitKey(1) & 0xFF == ord('q'):
@@ -65,8 +57,7 @@ try:
 except KeyboardInterrupt:
     print("⏹️ Остановка потока...")
 
-# Завершаем работу камер
-cam_left.stop_camera()
-cam_right.stop_camera()
+# Завершаем работу камеры
+cam.stop_camera()
 cv2.destroyAllWindows()
 print("✅ Поток завершён.")
