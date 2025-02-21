@@ -20,6 +20,13 @@ FOCAL_LENGTH = mtxL[0, 0]  # Фокусное расстояние в пиксе
 print(f"🔧 Загрузка калибровки: baseline={BASELINE:.2f}mm, focal={FOCAL_LENGTH:.2f}px")
 
 
+def undistort_and_rectify(frame, mtx, dist):
+    """Исправление искажений на изображении."""
+    h, w = frame.shape[:2]
+    new_mtx, roi = cv2.getOptimalNewCameraMatrix(mtx, dist, (w, h), 1, (w, h))
+    return cv2.undistort(frame, mtx, dist, None, new_mtx)
+
+
 def compute_disparity(left_box, right_box):
     """Вычисляет disparity между левым и правым bbox."""
     center_L = (left_box[1] + left_box[3]) // 2  # X-координата центра левого bbox
