@@ -30,7 +30,7 @@ class LabelLoader:
 class InferenceImage:
     def __init__(self, image: np.ndarray, label_loader: LabelLoader):
         self.image = image
-        self.label_loader = label_loader
+        self.label_loader = label_loader  # Подключаем loader
         self.model_w = None
         self.model_h = None
         self.scale = None
@@ -58,7 +58,6 @@ class InferenceImage:
         return self.padded_image
 
     def postprocess(self, detection_results: dict):
-        # Восстановление координат объектов в оригинальном изображении
         boxes = detection_results.get('detection_boxes', [])
         absolute_boxes = []
         for box in boxes:
@@ -91,13 +90,21 @@ class InferenceImage:
 
 class HailoInference:
     def __init__(self, hef_path, label_path, output_type='FLOAT32'):
+        """
+        Initialize the HailoInference class with the provided HEF model file path and labels.
+
+        Args:
+            hef_path (str): Path to the HEF model file.
+            label_path (str): Path to the label file.
+        """
         self.hef = HEF(hef_path)
         self.target = VDevice()
         self.label_loader = LabelLoader(label_path)  # Загружаем классы
         self.network_group = self._configure_and_get_network_group()
         self.network_group_params = self.network_group.create_params()
         self.input_vstreams_params, self.output_vstreams_params = self._create_vstream_params(output_type)
-        self.input_vstream_info, self.output_vstream_info = self._get_and_print_vstream_info()
+        self.input_vstream_info = self.hef.get_input_vstream_infos()
+        self.output_vstream_info = self.hef.get_output_vstream_infos()
 
     def _configure_and_get_network_group(self):
         configure_params = ConfigureParams.create_from_hef(self.hef, interface=HailoStreamInterface.PCIe)
@@ -109,30 +116,6 @@ class HailoInference:
             InputVStreamParams.make_from_network_group(self.network_group, format_type=input_format_type),
             OutputVStreamParams.make_from_network_group(self.network_group, format_type=getattr(FormatType, output_type))
         )
-
-    @staticmethod
-    def extract_detections(input_data, conf_threshold=0.5):
-        boxes, scores, classes = [], [], []
-        num_detections = 0
-
-        for i, detection in enumerate(input_data):
-            for det in detection:
-                bbox, score = det[:4], det[4]
-                if score >= conf_threshold:
-                    boxes.append(bbox)
-                    scores.append(score)
-                    classes.append(i)
-                    num_detections += 1
-
-        print(f'{classes=}')
-        print(f'{scores=}')
-        print(f'{num_detections=}')
-        return {
-            'detection_boxes': boxes,
-            'detection_classes': classes,
-            'detection_scores': scores,
-            'num_detections': num_detections
-        }
 
     def get_input_shape(self):
         return self.input_vstream_info[0].shape
@@ -158,6 +141,8 @@ class Processor:
             results.append(img.postprocess(result))
 
             drawed = img.draw_boxes(result)
+            cv2.namedWindow("Camera", cv2.WINDOW_NORMAL)
+            cv2.resizeWindow("Camera", 960, 540)
             cv2.imshow("Camera", drawed)
             cv2.waitKey(0)
             cv2.destroyAllWindows()
