@@ -84,14 +84,10 @@ try:
 
             processed_right = draw_boxes(frame_right, result_right)
 
-            # Отображение двух отдельных окон
-            cv2.namedWindow("Left Camera", cv2.WINDOW_NORMAL)
-            cv2.resizeWindow("Left Camera", 1280, 720)
-            cv2.imshow("Left Camera", processed_left)
-
-            cv2.namedWindow("Right Camera", cv2.WINDOW_NORMAL)
-            cv2.resizeWindow("Right Camera", 1280, 720)
-            cv2.imshow("Right Camera", processed_right)
+            combined = cv2.hconcat([processed_left, processed_right])
+            cv2.namedWindow("Dual Cameras", cv2.WINDOW_NORMAL)  # Делаем окно изменяемым
+            cv2.resizeWindow("Dual Cameras", 1920, 1080)
+            cv2.imshow("Dual Cameras", combined)
 
         # Выход по 'q'
         if cv2.waitKey(1) & 0xFF == ord('q'):
