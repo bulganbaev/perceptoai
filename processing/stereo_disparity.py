@@ -20,15 +20,32 @@ FOCAL_LENGTH = mtxL[0, 0]  # Фокусное расстояние в пиксе
 print(f"🔧 Загрузка калибровки: baseline={BASELINE:.2f}mm, focal={FOCAL_LENGTH:.2f}px")
 
 
-def undistort_and_rectify(frame, mtx, dist):
-    """Исправление искажений на изображении."""
-    h, w = frame.shape[:2]
-    new_mtx, roi = cv2.getOptimalNewCameraMatrix(mtx, dist, (w, h), 1, (w, h))
-    return cv2.undistort(frame, mtx, dist, None, new_mtx)
+def compute_disparity(left_box, right_box):
+    """Вычисляет disparity между левым и правым bbox."""
+    center_L = (left_box[1] + left_box[3]) // 2  # X-координата центра левого bbox
+    center_R = (right_box[1] + right_box[3]) // 2  # X-координата центра правого bbox
+
+    disparity = max(1, abs(center_L - center_R))  # Избегаем деления на 0
+    return disparity
+
+
+def compute_depth(left_results, right_results, matches):
+    """Вычисление глубины с учетом disparity."""
+    depths = []
+    for i, j in matches:
+        left_box = left_results['absolute_boxes'][i]
+        right_box = right_results['absolute_boxes'][j]
+
+        disparity = compute_disparity(left_box, right_box)
+        depth = (FOCAL_LENGTH * BASELINE) / disparity  # Глубина в мм
+
+        depths.append((left_box[1], left_box[0], depth))  # (X, Y, Depth)
+
+    return depths
 
 
 def compute_iou(boxA, boxB):
-    """Вычисляет Intersection over Union (IoU) между двумя баундинг боксами."""
+    """Вычисляет IoU между двумя bbox."""
     (y1_A, x1_A, y2_A, x2_A) = boxA
     (y1_B, x1_B, y2_B, x2_B) = boxB
 
@@ -46,7 +63,7 @@ def compute_iou(boxA, boxB):
 
 
 def match_boxes(left_results, right_results, iou_threshold=0.5):
-    """Сопоставление bounding boxes с использованием Hungarian Algorithm."""
+    """Сопоставление bbox с помощью Hungarian Algorithm."""
     left_boxes = left_results['absolute_boxes']
     right_boxes = right_results['absolute_boxes']
 
@@ -64,32 +81,14 @@ def match_boxes(left_results, right_results, iou_threshold=0.5):
 
     matches = []
     for i, j in zip(row_ind, col_ind):
-        if cost_matrix[i, j] < (1 - iou_threshold):  # Оставляем только уверенные совпадения
+        if cost_matrix[i, j] < (1 - iou_threshold):
             matches.append((i, j))
 
     return matches
 
 
-def compute_depth(left_results, right_results, matches):
-    """Вычисление глубины по диспарити с учетом калибровки."""
-    depths = []
-    for i, j in matches:
-        left_box = left_results['absolute_boxes'][i]
-        right_box = right_results['absolute_boxes'][j]
-
-        center_L = (left_box[1] + left_box[3]) // 2
-        center_R = (right_box[1] + right_box[3]) // 2
-
-        disparity = abs(center_L - center_R)
-        depth = (FOCAL_LENGTH * BASELINE) / disparity if disparity > 0 else float('inf')
-
-        depths.append((center_L, left_box[0], depth))
-
-    return depths
-
-
 def draw_boxes(image, results, color=(0, 255, 0)):
-    """Отрисовка баундинг боксов."""
+    """Отрисовка bbox."""
     for (y1, x1, y2, x2), class_id, score in zip(results['absolute_boxes'], results['detection_classes'],
                                                  results['detection_scores']):
         if class_id == 0:
@@ -124,13 +123,13 @@ try:
             detections = proc.process([frame_left, frame_right])
             result_left, result_right = detections[0], detections[1]
 
-            # === 5. Сопоставляем объекты (Hungarian Algorithm) ===
+            # === 5. Сопоставляем bbox (Hungarian Algorithm) ===
             matches = match_boxes(result_left, result_right)
 
             # === 6. Вычисляем глубину ===
             depth_results = compute_depth(result_left, result_right, matches)
 
-            # === 7. Отрисовка боксов и глубины ===
+            # === 7. Отрисовка bbox и глубины ===
             processed_left = draw_boxes(frame_left, result_left, color=(0, 255, 0))
             processed_right = draw_boxes(frame_right, result_right, color=(255, 0, 0))
 
