@@ -147,6 +147,8 @@ try:
             result_left, result_right = detections[0], detections[1]
 
             matches = match_boxes(result_left, result_right)
+            print(f"🔍 Matches found: {matches}")
+
             depth_results = compute_depth(result_left, result_right, matches)
 
             processed_left = draw_boxes(frame_left, result_left, color=(0, 255, 0))
