@@ -20,6 +20,7 @@ FOCAL_LENGTH = mtxL[0, 0]  # Фокусное расстояние в пиксе
 print(f"🔧 Загрузка калибровки: baseline={BASELINE:.2f}mm, focal={FOCAL_LENGTH:.2f}px")
 
 
+
 def undistort_and_rectify(frame, mtx, dist):
     """Исправление искажений на изображении."""
     h, w = frame.shape[:2]
@@ -76,7 +77,8 @@ def compute_iou(boxA, boxB):
     boxA_area = (x2_A - x1_A) * (y2_A - y1_A)
     boxB_area = (x2_B - x1_B) * (y2_B - y1_B)
 
-    iou = intersection_area / float(boxA_area + boxB_area - intersection_area) if (boxA_area + boxB_area - intersection_area) > 0 else 0
+    iou = intersection_area / float(boxA_area + boxB_area - intersection_area) if (
+                                                                                              boxA_area + boxB_area - intersection_area) > 0 else 0
     return iou
 
 
@@ -124,7 +126,55 @@ def draw_depth(image, depth_results):
 
 
 # === 2. ЗАПУСК КАМЕР И ДЕТЕКЦИИ ===
-inf = HailoInference('data/models/yolov11s.hef')
+import cv2
+import os
+import numpy as np
+from scipy.optimize import linear_sum_assignment  # Hungarian Algorithm
+from cam.camera_driver import CameraDriver
+from processing.hailo_detection import HailoInference, Processor
+
+# === 1. ЗАГРУЗКА ПАРАМЕТРОВ КАЛИБРОВКИ ===
+calib_data = np.load("data/calibration/calibration_data.npz")
+
+mtxL = calib_data["mtxL"]
+distL = calib_data["distL"]
+mtxR = calib_data["mtxR"]
+distR = calib_data["distR"]
+R = calib_data["R"]
+T = calib_data["T"]
+
+BASELINE = abs(T[0][0])  # Расстояние между камерами (мм)
+FOCAL_LENGTH = mtxL[0, 0]  # Фокусное расстояние в пикселях
+
+print(f"🔧 Загрузка калибровки: baseline={BASELINE:.2f}mm, focal={FOCAL_LENGTH:.2f}px")
+
+models_dir = "data/models"
+
+
+def choose_model():
+    """Выбираем модель перед запуском"""
+    model_files = [f for f in os.listdir(models_dir) if f.endswith(".hef")]
+
+    print("\n📌 Доступные модели:")
+    for i, model in enumerate(model_files):
+        print(f"  {i + 1}. {model}")
+
+    while True:
+        try:
+            choice = int(input("\n👉 Выберите номер модели: ")) - 1
+            if 0 <= choice < len(model_files):
+                return os.path.join(models_dir, model_files[choice])
+            else:
+                print("❌ Неверный ввод. Попробуйте снова.")
+        except ValueError:
+            print("❌ Введите число!")
+
+
+# === 2. ЗАПУСК КАМЕР И ДЕТЕКЦИИ ===
+model_path = choose_model()
+print(f"🚀 Запуск с моделью: {model_path}")
+
+inf = HailoInference(model_path)
 proc = Processor(inf, conf=0.5)
 
 cam_left = CameraDriver(camera_id=0)
