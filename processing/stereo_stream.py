@@ -4,6 +4,22 @@ import numpy as np
 from cam.camera_driver import CameraDriver
 from processing.hailo_detection import HailoInference, Processor
 
+
+def draw_boxes(image, results: dict):
+    boxes = results.get('absolute_boxes', [])
+    scores = results.get('detection_scores', [])
+    classes = results.get('detection_classes', [])
+
+    for i, (y1, x1, y2, x2) in enumerate(boxes):
+        class_id = classes[i] if i < len(classes) else "Unknown"
+        score = scores[i] if i < len(scores) else 0.0
+        label = f'{class_id} ({score:.2f})'
+
+        cv2.rectangle(image, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        cv2.putText(image, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+
+    return image
+
 # Инициализация модели детекции
 inf = HailoInference('data/models/yolov11s.hef', 'data/labels/coco.txt')
 proc = Processor(inf, conf=0.5)
@@ -43,7 +59,7 @@ try:
                 'detection_scores': filtered_scores
             })
 
-            processed_frame = proc.label_loader.draw_boxes(result)
+            processed_frame = draw_boxes(frame, result)
 
             # Отображение окна
             cv2.namedWindow("Camera Stream", cv2.WINDOW_NORMAL)

@@ -5,28 +5,9 @@ import numpy as np
 import time
 
 
-class LabelLoader:
-    """Класс для загрузки классов объектов из текстового файла."""
-    def __init__(self, label_path: str):
-        self.label_path = label_path
-        self.labels = self._load_labels()
-
-    def _load_labels(self):
-        """Загружает классы объектов из текстового файла построчно."""
-        try:
-            with open(self.label_path, "r", encoding="utf-8") as f:
-                labels = {i: line.strip() for i, line in enumerate(f.readlines())}
-            return labels
-        except FileNotFoundError:
-            print(f"[ERROR] Labels file '{self.label_path}' not found!")
-            return {}
-
-    def get_label(self, class_id: int) -> str:
-        """Возвращает название класса по индексу."""
-        return self.labels.get(class_id, f"Class {class_id}")
 
 class InferenceImage:
-    def __init__(self, image: np.ndarray, label_loader: LabelLoader):
+    def __init__(self, image: np.ndarray):
         self.image = image
         self.model_w = None
         self.model_h = None
@@ -36,7 +17,6 @@ class InferenceImage:
         self.pasted_w = None
         self.pasted_h = None
         self.padded_image = None
-        self.label_loader = label_loader
 
     def set_model_input_size(self, model_w, model_h):
         self.model_w = model_w
@@ -89,9 +69,8 @@ class InferenceImage:
 
         for i, (y1, x1, y2, x2) in enumerate(boxes):
             class_id = classes[i] if i < len(classes) else "Unknown"
-            class_name = self.label_loader.get_label(class_id)  # Получаем имя класса
             score = scores[i] if i < len(scores) else 0.0
-            label = f'{class_name} ({score:.2f})'
+            label = f'{class_id} ({score:.2f})'
 
             cv2.rectangle(self.image, (x1, y1), (x2, y2), (0, 255, 0), 2)
             cv2.putText(self.image, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
@@ -100,7 +79,7 @@ class InferenceImage:
 
 
 class HailoInference:
-    def __init__(self, hef_path, label_path,  output_type='FLOAT32'):
+    def __init__(self, hef_path,  output_type='FLOAT32'):
         """
         Initialize the HailoInference class with the provided HEF model file path.
 
@@ -254,7 +233,6 @@ class Processor:
     def __init__(self, inference: HailoInference, conf: float = 0.5):
         self._inference = inference
         self._conf = conf
-        self.label_loader = inference.label_loader
 
     def process(self, images: list):
         start_time = time.time()
@@ -262,7 +240,7 @@ class Processor:
         height, width, _ = self._inference.get_input_shape()
         preprocessed_images = []
         for im in images:
-            inf_img = InferenceImage(im, self.label_loader)
+            inf_img = InferenceImage(im)
             inf_img.set_model_input_size(width, height)
             preprocessed_images.append(inf_img.preprocess())
             inf_images.append(inf_img)
