@@ -1,6 +1,8 @@
 import cv2
 import os
 import numpy as np
+from collections import deque
+from scipy.optimize import linear_sum_assignment  # Hungarian Algorithm
 from cam.camera_driver import CameraDriver
 from processing.hailo_detection import HailoInference, Processor
 
@@ -20,6 +22,10 @@ FOCAL_LENGTH = mtxL[0, 0]  # Фокусное расстояние в пиксе
 print(f"🔧 Загрузка калибровки: baseline={BASELINE:.2f}mm, focal={FOCAL_LENGTH:.2f}px")
 models_dir = "data/models"
 
+# === 2. ИНИЦИАЛИЗАЦИЯ ОЧЕРЕДИ ДЛЯ ФИЛЬТРАЦИИ ГЛУБИНЫ ===
+depth_history = {}  # Храним последние измерения глубины
+DEPTH_FILTER_SIZE = 5  # Количество последних измерений для медианного фильтра
+
 
 def undistort_and_rectify(frame, mtx, dist):
     """Исправление искажений на изображении."""
@@ -33,13 +39,11 @@ def track_optical_flow(frame_left, frame_right, left_boxes):
     gray_left = cv2.cvtColor(frame_left, cv2.COLOR_BGR2GRAY)
     gray_right = cv2.cvtColor(frame_right, cv2.COLOR_BGR2GRAY)
 
-    # Берём центры bbox как точки для отслеживания
     left_pts = np.array([[(x1 + x2) // 2, (y1 + y2) // 2] for (y1, x1, y2, x2) in left_boxes], dtype=np.float32)
 
     if len(left_pts) == 0:
         return []
 
-    # Оптический поток Lucas-Kanade
     right_pts, status, _ = cv2.calcOpticalFlowPyrLK(gray_left, gray_right, left_pts, None)
 
     matches = []
@@ -51,7 +55,8 @@ def track_optical_flow(frame_left, frame_right, left_boxes):
 
 
 def compute_depth(left_results, right_results, matches):
-    """Вычисление глубины с учетом disparity."""
+    """Вычисление глубины с учетом disparity и медианного фильтра."""
+    global depth_history
     depths = []
     left_boxes = left_results['absolute_boxes']
     right_boxes = right_results['absolute_boxes']
@@ -59,7 +64,6 @@ def compute_depth(left_results, right_results, matches):
     for i, right_pt in matches:
         left_box = left_boxes[i]
 
-        # Ищем ближайший bbox в правой камере к найденной точке
         best_match, min_dist = None, float('inf')
         for j, right_box in enumerate(right_boxes):
             center_R_x = (right_box[1] + right_box[3]) // 2  # Центр X bbox справа
@@ -73,7 +77,15 @@ def compute_depth(left_results, right_results, matches):
             disparity = max(1, abs(left_box[1] - right_box[1]))  # Избегаем деления на 0
             depth = (FOCAL_LENGTH * BASELINE) / disparity
 
-            depths.append((left_box[1], left_box[0], depth))  # (X, Y, Depth)
+            # 📌 Фильтрация глубины через медианный фильтр
+            obj_id = (left_box[1], left_box[0])  # Идентификатор объекта
+            if obj_id not in depth_history:
+                depth_history[obj_id] = deque(maxlen=DEPTH_FILTER_SIZE)
+
+            depth_history[obj_id].append(depth)
+            filtered_depth = np.median(depth_history[obj_id])  # Медианное значение
+
+            depths.append((left_box[1], left_box[0], filtered_depth))  # (X, Y, Depth)
 
     return depths
 
@@ -115,7 +127,7 @@ def choose_model():
             print("❌ Введите число!")
 
 
-# === 2. ЗАПУСК КАМЕР И ДЕТЕКЦИИ ===
+# === 3. ЗАПУСК КАМЕР И ДЕТЕКЦИИ ===
 model_path = choose_model()
 print(f"🚀 Запуск с моделью: {model_path}")
 
@@ -142,8 +154,6 @@ try:
             result_left, result_right = detections[0], detections[1]
 
             matches = track_optical_flow(frame_left, frame_right, result_left['absolute_boxes'])
-            print(f"🔍 Matches found: {matches}")
-
             depth_results = compute_depth(result_left, result_right, matches)
 
             processed_left = draw_boxes(frame_left, result_left, color=(0, 255, 0))
@@ -153,8 +163,6 @@ try:
             processed_right = draw_depth(processed_right, depth_results)
 
             combined = cv2.hconcat([processed_left, processed_right])
-            cv2.namedWindow("Stereo Depth", cv2.WINDOW_NORMAL)
-            cv2.resizeWindow("Stereo Depth", 1920, 1080)
             cv2.imshow("Stereo Depth", combined)
 
         if cv2.waitKey(1) & 0xFF == ord('q'):
