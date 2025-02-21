@@ -21,7 +21,7 @@ def draw_boxes(image, results: dict):
     return image
 
 # Инициализация модели детекции
-inf = HailoInference('data/models/yolov11s.hef', 'data/labels/coco.txt')
+inf = HailoInference('data/models/yolov11s.hef')
 proc = Processor(inf, conf=0.5)
 
 # Запуск одной камеры (например, левой)
