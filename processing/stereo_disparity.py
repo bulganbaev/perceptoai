@@ -29,24 +29,35 @@ def undistort_and_rectify(frame, mtx, dist):
 
 def compute_disparity(left_box, right_box):
     """Вычисляет disparity между левым и правым bbox."""
-    center_L = (left_box[1] + left_box[3]) // 2  # X-координата центра левого bbox
-    center_R = (right_box[1] + right_box[3]) // 2  # X-координата центра правого bbox
+    center_L_x = (left_box[1] + left_box[3]) // 2  # X-координата центра bbox слева
+    center_R_x = (right_box[1] + right_box[3]) // 2  # X-координата центра bbox справа
 
-    disparity = max(1, abs(center_L - center_R))  # Избегаем деления на 0
-    return disparity
+    height_L = left_box[2] - left_box[0]  # Высота объекта слева
+    height_R = right_box[2] - right_box[0]  # Высота объекта справа
+
+    # Если bbox очень высокий → берём только середину
+    if height_L > 100 or height_R > 100:
+        center_L_y = left_box[0] + height_L // 3  # 1/3 сверху
+        center_R_y = right_box[0] + height_R // 3  # 1/3 сверху
+    else:
+        center_L_y = (left_box[0] + left_box[2]) // 2  # Обычный центр
+        center_R_y = (right_box[0] + right_box[2]) // 2  # Обычный центр
+
+    disparity = max(1, abs(center_L_x - center_R_x))  # Избегаем деления на 0
+    return disparity, center_L_x, center_L_y
 
 
 def compute_depth(left_results, right_results, matches):
-    """Вычисление глубины с учетом disparity."""
+    """Вычисление глубины с учетом disparity и реального объекта."""
     depths = []
     for i, j in matches:
         left_box = left_results['absolute_boxes'][i]
         right_box = right_results['absolute_boxes'][j]
 
-        disparity = compute_disparity(left_box, right_box)
+        disparity, obj_x, obj_y = compute_disparity(left_box, right_box)
         depth = (FOCAL_LENGTH * BASELINE) / disparity  # Глубина в мм
 
-        depths.append((left_box[1], left_box[0], depth))  # (X, Y, Depth)
+        depths.append((obj_x, obj_y, depth))  # (X, Y, Depth)
 
     return depths
 
@@ -105,6 +116,13 @@ def draw_boxes(image, results, color=(0, 255, 0)):
     return image
 
 
+def draw_depth(image, depth_results):
+    """Отрисовка метки глубины на изображении."""
+    for x, y, d in depth_results:
+        cv2.putText(image, f"Depth: {d:.1f} mm", (x, y), cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 255, 255), 3)
+    return image
+
+
 # === 2. ЗАПУСК КАМЕР И ДЕТЕКЦИИ ===
 inf = HailoInference('data/models/yolov11s.hef')
 proc = Processor(inf, conf=0.5)
@@ -122,29 +140,21 @@ try:
         frame_right = cam_right.get_frame()
 
         if frame_left is not None and frame_right is not None:
-            # === 3. Исправляем искажения ===
             frame_left = undistort_and_rectify(frame_left, mtxL, distL)
             frame_right = undistort_and_rectify(frame_right, mtxR, distR)
 
-            # === 4. Запускаем детекцию ===
             detections = proc.process([frame_left, frame_right])
             result_left, result_right = detections[0], detections[1]
 
-            # === 5. Сопоставляем bbox (Hungarian Algorithm) ===
             matches = match_boxes(result_left, result_right)
-
-            # === 6. Вычисляем глубину ===
             depth_results = compute_depth(result_left, result_right, matches)
 
-            # === 7. Отрисовка bbox и глубины ===
             processed_left = draw_boxes(frame_left, result_left, color=(0, 255, 0))
             processed_right = draw_boxes(frame_right, result_right, color=(255, 0, 0))
 
-            for x, y, d in depth_results:
-                cv2.putText(processed_left, f"Depth: {d:.1f} mm", (x, y), cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 255, 255), 3)
-                cv2.putText(processed_right, f"Depth: {d:.1f} mm", (x, y), cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 255, 255), 3)
+            processed_left = draw_depth(processed_left, depth_results)
+            processed_right = draw_depth(processed_right, depth_results)
 
-            # === 8. Вывод ===
             combined = cv2.hconcat([processed_left, processed_right])
             cv2.namedWindow("Stereo Depth", cv2.WINDOW_NORMAL)
             cv2.resizeWindow("Stereo Depth", 1920, 1080)
@@ -156,7 +166,6 @@ try:
 except KeyboardInterrupt:
     print("⏹️ Остановка потока...")
 
-# === 9. Завершаем работу камер ===
 cam_left.stop_camera()
 cam_right.stop_camera()
 cv2.destroyAllWindows()
