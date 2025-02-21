@@ -80,7 +80,7 @@ def compute_iou(boxA, boxB):
     return iou
 
 
-def match_boxes(left_results, right_results, iou_threshold=0.5):
+def match_boxes(left_results, right_results, iou_threshold=0.9):
     """Сопоставление bbox с помощью Hungarian Algorithm."""
     left_boxes = left_results['absolute_boxes']
     right_boxes = right_results['absolute_boxes']
