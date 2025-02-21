@@ -12,3 +12,8 @@ img = cv2.imread('data/images/left/left_00.jpg')
 detected = proc.process([img])
 
 
+
+
+# Ожидаем нажатие клавиши и закрываем окно
+cv2.waitKey(0)
+cv2.destroyAllWindows()
