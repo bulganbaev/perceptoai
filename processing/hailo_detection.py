@@ -86,7 +86,7 @@ class InferenceImage:
         scores = results.get('detection_scores', [])
         classes = results.get('detection_classes', [])
 
-        for i, (x1, y1, x2, y2) in enumerate(boxes):
+        for i, (y1, x1, y2, x2) in enumerate(boxes):
             class_id = classes[i] if i < len(classes) else "Unknown"
             class_name = self.label_loader.get_label(class_id)  # Получаем имя класса
             score = scores[i] if i < len(scores) else 0.0
