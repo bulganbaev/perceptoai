@@ -154,7 +154,9 @@ class HailoInference:
                     scores.append(score)
                     classes.append(i)
                     num_detections += 1
-
+        print(f'{classes=}')
+        print(f'{scores}')
+        print(f'{num_detections}')
         return {
             'detection_boxes': boxes,
             'detection_classes': classes,
