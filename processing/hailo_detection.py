@@ -1,12 +1,36 @@
 import cv2
-from hailo_platform import (HEF, VDevice, HailoStreamInterface, InferVStreams, ConfigureParams,
-                            InputVStreamParams, OutputVStreamParams, FormatType, HailoSchedulingAlgorithm)
 import numpy as np
+from hailo_platform import (
+    HEF, VDevice, HailoStreamInterface, InferVStreams, ConfigureParams,
+    InputVStreamParams, OutputVStreamParams, FormatType, HailoSchedulingAlgorithm
+)
+
+
+class LabelLoader:
+    """Класс для загрузки классов объектов из текстового файла."""
+    def __init__(self, label_path: str):
+        self.label_path = label_path
+        self.labels = self._load_labels()
+
+    def _load_labels(self):
+        """Загружает классы объектов из текстового файла построчно."""
+        try:
+            with open(self.label_path, "r", encoding="utf-8") as f:
+                labels = {i: line.strip() for i, line in enumerate(f.readlines())}
+            return labels
+        except FileNotFoundError:
+            print(f"[ERROR] Labels file '{self.label_path}' not found!")
+            return {}
+
+    def get_label(self, class_id: int) -> str:
+        """Возвращает название класса по индексу."""
+        return self.labels.get(class_id, f"Class {class_id}")
 
 
 class InferenceImage:
-    def __init__(self, image: np.ndarray):
+    def __init__(self, image: np.ndarray, label_loader: LabelLoader):
         self.image = image
+        self.label_loader = label_loader
         self.model_w = None
         self.model_h = None
         self.scale = None
@@ -26,137 +50,83 @@ class InferenceImage:
         self.new_img_w, self.new_img_h = int(img_w * self.scale), int(img_h * self.scale)
         image_resized = cv2.resize(self.image, (self.new_img_w, self.new_img_h))
 
-        # Create a new padded image
-        self.padded_image = np.zeros((self.model_w, self.model_h, 3), dtype=np.uint8)
+        # Создаём новое изображение с отступами (padding)
+        self.padded_image = np.zeros((self.model_h, self.model_w, 3), dtype=np.uint8)
         self.pasted_w = (self.model_w - self.new_img_w) // 2
         self.pasted_h = (self.model_h - self.new_img_h) // 2
         self.padded_image[self.pasted_h:self.pasted_h + self.new_img_h, self.pasted_w:self.pasted_w+self.new_img_w, :] = image_resized
         return self.padded_image
 
-    def preprocessed(self):
-        return self.padded_image
-
     def postprocess(self, detection_results: dict):
-        # as of now just restore the original coordinates in the image
-        boxes = detection_results.get('detection_boxes')
+        # Восстановление координат объектов в оригинальном изображении
+        boxes = detection_results.get('detection_boxes', [])
         absolute_boxes = []
         for box in boxes:
-            abs_coords = []
-            for i, coord in enumerate(box):
-                if i % 2 == 0:
-                    # height (y) is first coming
-                    abs_coord = coord * self.model_h
-                    abs_coord -= self.pasted_h
-                else:
-                    # getting real coordinates first
-                    abs_coord = coord * self.model_w
-                    # get a coordinate without padding
-                    abs_coord -= self.pasted_w
-                # restore original coordinates
-                abs_coord /= self.scale
-                abs_coords.append(int(abs_coord))
+            abs_coords = [
+                int((coord * self.model_h - self.pasted_h) / self.scale) if i % 2 == 0
+                else int((coord * self.model_w - self.pasted_w) / self.scale)
+                for i, coord in enumerate(box)
+            ]
             absolute_boxes.append(abs_coords)
 
-        detection_results.update({'absolute_boxes': absolute_boxes})
+        detection_results['absolute_boxes'] = absolute_boxes
         return detection_results
 
     def draw_boxes(self, results: dict):
-        boxes = results['absolute_boxes']
-        for box in boxes:
-            top_left = (int(box[1]), int(box[0]))
-            bottom_right = (int(box[3]), int(box[2]))
-            cv2.rectangle(self.image, top_left, bottom_right, (0, 0, 255), 3)
+        boxes = results.get('absolute_boxes', [])
+        scores = results.get('detection_scores', [])
+        classes = results.get('detection_classes', [])
+
+        for i, (x1, y1, x2, y2) in enumerate(boxes):
+            class_id = classes[i] if i < len(classes) else "Unknown"
+            class_name = self.label_loader.get_label(class_id)  # Получаем имя класса
+            score = scores[i] if i < len(scores) else 0.0
+            label = f'{class_name} ({score:.2f})'
+
+            cv2.rectangle(self.image, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            cv2.putText(self.image, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+
         return self.image
 
 
 class HailoInference:
-    def __init__(self, hef_path, output_type='FLOAT32'):
-        """
-        Initialize the HailoInference class with the provided HEF model file path.
-
-        Args:
-            hef_path (str): Path to the HEF model file.
-        """
+    def __init__(self, hef_path, label_path, output_type='FLOAT32'):
         self.hef = HEF(hef_path)
         self.target = VDevice()
+        self.label_loader = LabelLoader(label_path)  # Загружаем классы
         self.network_group = self._configure_and_get_network_group()
         self.network_group_params = self.network_group.create_params()
         self.input_vstreams_params, self.output_vstreams_params = self._create_vstream_params(output_type)
         self.input_vstream_info, self.output_vstream_info = self._get_and_print_vstream_info()
 
     def _configure_and_get_network_group(self):
-        """
-        Configure the Hailo device and get the network group.
-
-        Returns:
-            NetworkGroup: Configured network group.
-        """
         configure_params = ConfigureParams.create_from_hef(self.hef, interface=HailoStreamInterface.PCIe)
-        network_group = self.target.configure(self.hef, configure_params)[0]
-        return network_group
+        return self.target.configure(self.hef, configure_params)[0]
 
     def _create_vstream_params(self, output_type):
-        """
-        Create input and output stream parameters.
-
-        Args:
-            output_type (str): Format type of the output stream.
-
-        Returns:
-            tuple: Input and output stream parameters.
-        """
         input_format_type = self.hef.get_input_vstream_infos()[0].format.type
-        input_vstreams_params = InputVStreamParams.make_from_network_group(self.network_group, format_type=input_format_type)
-        output_vstreams_params = OutputVStreamParams.make_from_network_group(self.network_group, format_type=getattr(FormatType, output_type))
-        return input_vstreams_params, output_vstreams_params
-
-    def _get_and_print_vstream_info(self):
-        """
-        Get and print information about input and output stream layers.
-
-        Returns:
-            tuple: List of input stream layer information, List of output stream layer information.
-        """
-        input_vstream_info = self.hef.get_input_vstream_infos()
-        output_vstream_info = self.hef.get_output_vstream_infos()
-
-        for layer_info in input_vstream_info:
-            print(f'Input layer: {layer_info.name} {layer_info.shape} {layer_info.format.type}')
-        for layer_info in output_vstream_info:
-            print(f'Output layer: {layer_info.name} {layer_info.shape} {layer_info.format.type}')
-
-        return input_vstream_info, output_vstream_info
+        return (
+            InputVStreamParams.make_from_network_group(self.network_group, format_type=input_format_type),
+            OutputVStreamParams.make_from_network_group(self.network_group, format_type=getattr(FormatType, output_type))
+        )
 
     @staticmethod
-    def extract_detections(input_data, conf_threshold: float = 0.5):
-        """
-        Extract detections from the input data.
-
-        Args:
-            input_data (list): Raw detections from the model.
-            threshold (float): Score threshold for filtering detections.
-
-        Returns:
-            dict: Filtered detection results.
-        """
+    def extract_detections(input_data, conf_threshold=0.5):
         boxes, scores, classes = [], [], []
         num_detections = 0
 
         for i, detection in enumerate(input_data):
-            if len(detection) == 0:
-                continue
-
             for det in detection:
                 bbox, score = det[:4], det[4]
-
                 if score >= conf_threshold:
                     boxes.append(bbox)
                     scores.append(score)
                     classes.append(i)
                     num_detections += 1
+
         print(f'{classes=}')
-        print(f'{scores}')
-        print(f'{num_detections}')
+        print(f'{scores=}')
+        print(f'{num_detections=}')
         return {
             'detection_boxes': boxes,
             'detection_classes': classes,
@@ -165,84 +135,31 @@ class HailoInference:
         }
 
     def get_input_shape(self):
-        """
-        Get the shape of the model's input layer.
-
-        Returns:
-            tuple: Shape of the model's input layer.
-        """
-        return self.input_vstream_info[0].shape  # Assumes that the model has one input
-
-    def run(self, input_data):
-        """
-        Run inference on Hailo-8 device.
-
-        Args:
-            input_data (np.ndarray, dict, list, tuple): Input data for inference.
-
-        Returns:
-            np.ndarray: Inference output.
-        """
-        input_dict = self._prepare_input_data(input_data)
-
-        with InferVStreams(self.network_group, self.input_vstreams_params, self.output_vstreams_params) as infer_pipeline:
-            with self.network_group.activate(self.network_group_params):
-                output = infer_pipeline.infer(input_dict)[self.output_vstream_info[0].name]
-
-        return output
-
-    def _prepare_input_data(self, input_data):
-        """
-        Prepare input data for inference.
-
-        Args:
-            input_data (np.ndarray, dict, list, tuple): Input data for inference.
-
-        Returns:
-            dict: Prepared input data.
-        """
-        input_dict = {}
-        if isinstance(input_data, dict):
-            return input_data
-        elif isinstance(input_data, (list, tuple)):
-            for layer_info in self.input_vstream_info:
-                input_dict[layer_info.name] = input_data
-        else:
-            if input_data.ndim == 3:
-                input_data = np.expand_dims(input_data, axis=0)
-            input_dict[self.input_vstream_info[0].name] = input_data
-
-        return input_dict
-
-    def release_device(self):
-        """
-        Release the Hailo device.
-        """
-        self.target.release()
+        return self.input_vstream_info[0].shape
 
 
 class Processor:
     def __init__(self, inference: HailoInference, conf: float = 0.5):
         self._inference = inference
         self._conf = conf
+        self.label_loader = inference.label_loader  # Доступ к labels
 
     def process(self, images: list):
-        inf_images = []
         height, width, _ = self._inference.get_input_shape()
-        preprocessed_images = []
-        for im in images:
-            inf_img = InferenceImage(im)
-            inf_img.set_model_input_size(width, height)
-            preprocessed_images.append(inf_img.preprocess())
-            inf_images.append(inf_img)
-        raw_detect_data = self._inference.run(np.asarray(preprocessed_images))
-        final_result = []
-        for det, im in zip(raw_detect_data, inf_images):
-            result = HailoInference.extract_detections(det, self._conf)
-            final_result.append(im.postprocess(result))
+        processed_images = [InferenceImage(img, self.label_loader) for img in images]
+        for img in processed_images:
+            img.set_model_input_size(width, height)
+            img.preprocess()
 
-            drawed = im.draw_boxes(result)
-            cv2.namedWindow("Camera", cv2.WINDOW_NORMAL)  # Делаем окно изменяемым
-            cv2.resizeWindow("Camera", 960, 540)
+        raw_detections = self._inference.run(np.array([img.padded_image for img in processed_images]))
+        results = []
+        for img, detection in zip(processed_images, raw_detections):
+            result = HailoInference.extract_detections(detection, self._conf)
+            results.append(img.postprocess(result))
+
+            drawed = img.draw_boxes(result)
             cv2.imshow("Camera", drawed)
-        return final_result
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+
+        return results
