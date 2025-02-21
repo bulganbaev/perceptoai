@@ -6,6 +6,7 @@ from processing.hailo_detection import HailoInference, Processor
 
 
 def draw_boxes(image, results: dict):
+    """Отрисовка боксов на изображении."""
     boxes = results.get('absolute_boxes', [])
     scores = results.get('detection_scores', [])
     classes = results.get('detection_classes', [])
@@ -20,51 +21,77 @@ def draw_boxes(image, results: dict):
 
     return image
 
+
 # Инициализация модели детекции
-inf = HailoInference('data/models/yolov11s.hef')
+inf = HailoInference('data/models/yolov11s.hef', 'data/labels/coco.txt')
 proc = Processor(inf, conf=0.5)
 
-# Запуск одной камеры (например, левой)
-cam = CameraDriver(camera_id=0)
-cam.start_camera()
+# Запуск двух камер
+cam_left = CameraDriver(camera_id=0)
+cam_right = CameraDriver(camera_id=1)
 
-print("🎥 Запуск потока. Нажмите 'q' для выхода.")
+cam_left.start_camera()
+cam_right.start_camera()
+
+print("🎥 Запуск стереопотока. Нажмите 'q' для выхода.")
 
 try:
     while True:
-        frame = cam.get_frame()
+        frame_left = cam_left.get_frame()
+        frame_right = cam_right.get_frame()
 
-        if frame is not None:
-            # Запуск детекции
-            detections = proc.process([frame])
-            print(detections)
+        if frame_left is not None and frame_right is not None:
+            # Запуск детекции на обеих камерах
+            detections = proc.process([frame_left, frame_right])
 
-            # Фильтруем только class=0 (обычно это 'person' в COCO)
-            filtered_boxes = []
-            filtered_scores = []
-            filtered_classes = []
+            # Обработка левой камеры
+            result_left = detections[0]
+            filtered_boxes_left = []
+            filtered_scores_left = []
+            filtered_classes_left = []
 
-            result = detections[0]  # Обрабатываем первый кадр (только одна камера)
-
-            for i, class_id in enumerate(result['detection_classes']):
+            for i, class_id in enumerate(result_left['detection_classes']):
                 if class_id == 0:  # Фильтруем только class=0
-                    filtered_boxes.append(result['absolute_boxes'][i])
-                    filtered_scores.append(result['detection_scores'][i])
-                    filtered_classes.append(class_id)
+                    filtered_boxes_left.append(result_left['absolute_boxes'][i])
+                    filtered_scores_left.append(result_left['detection_scores'][i])
+                    filtered_classes_left.append(class_id)
 
-            # Обновляем результаты и рисуем боксы только для class=0
-            result.update({
-                'absolute_boxes': filtered_boxes,
-                'detection_classes': filtered_classes,
-                'detection_scores': filtered_scores
+            result_left.update({
+                'absolute_boxes': filtered_boxes_left,
+                'detection_classes': filtered_classes_left,
+                'detection_scores': filtered_scores_left
             })
 
-            processed_frame = draw_boxes(frame, result)
+            processed_left = draw_boxes(frame_left, result_left)
 
-            # Отображение окна
-            cv2.namedWindow("Camera Stream", cv2.WINDOW_NORMAL)
-            cv2.resizeWindow("Camera Stream", 1280, 720)
-            cv2.imshow("Camera Stream", processed_frame)
+            # Обработка правой камеры
+            result_right = detections[1]
+            filtered_boxes_right = []
+            filtered_scores_right = []
+            filtered_classes_right = []
+
+            for i, class_id in enumerate(result_right['detection_classes']):
+                if class_id == 0:  # Фильтруем только class=0
+                    filtered_boxes_right.append(result_right['absolute_boxes'][i])
+                    filtered_scores_right.append(result_right['detection_scores'][i])
+                    filtered_classes_right.append(class_id)
+
+            result_right.update({
+                'absolute_boxes': filtered_boxes_right,
+                'detection_classes': filtered_classes_right,
+                'detection_scores': filtered_scores_right
+            })
+
+            processed_right = draw_boxes(frame_right, result_right)
+
+            # Отображение двух отдельных окон
+            cv2.namedWindow("Left Camera", cv2.WINDOW_NORMAL)
+            cv2.resizeWindow("Left Camera", 1280, 720)
+            cv2.imshow("Left Camera", processed_left)
+
+            cv2.namedWindow("Right Camera", cv2.WINDOW_NORMAL)
+            cv2.resizeWindow("Right Camera", 1280, 720)
+            cv2.imshow("Right Camera", processed_right)
 
         # Выход по 'q'
         if cv2.waitKey(1) & 0xFF == ord('q'):
@@ -73,7 +100,8 @@ try:
 except KeyboardInterrupt:
     print("⏹️ Остановка потока...")
 
-# Завершаем работу камеры
-cam.stop_camera()
+# Завершаем работу камер
+cam_left.stop_camera()
+cam_right.stop_camera()
 cv2.destroyAllWindows()
 print("✅ Поток завершён.")
