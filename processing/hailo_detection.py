@@ -88,7 +88,6 @@ class HailoInference:
         """
         self.hef = HEF(hef_path)
         self.target = VDevice()
-        self.label_loader = LabelLoader(label_path)
         self.network_group = self._configure_and_get_network_group()
         self.network_group_params = self.network_group.create_params()
         self.input_vstreams_params, self.output_vstreams_params = self._create_vstream_params(output_type)
