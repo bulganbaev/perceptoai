@@ -272,10 +272,10 @@ class Processor:
             result = HailoInference.extract_detections(det, self._conf)
             final_result.append(im.postprocess(result))
 
-            # drawed = im.draw_boxes(result)
-            # cv2.namedWindow("Camera", cv2.WINDOW_NORMAL)  # Делаем окно изменяемым
-            # cv2.resizeWindow("Camera", 960, 540)
-            # cv2.imshow("Camera", drawed)
+            drawed = im.draw_boxes(result)
+            cv2.namedWindow("Camera", cv2.WINDOW_NORMAL)  # Делаем окно изменяемым
+            cv2.resizeWindow("Camera", 960, 540)
+            cv2.imshow("Camera", drawed)
         elapsed_time = time.time() - start_time  # Вычисляем общее время выполнения
         print(f"[INFO] Total elapsed time: {elapsed_time:.3f} seconds")
         return final_result
