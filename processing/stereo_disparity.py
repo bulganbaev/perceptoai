@@ -59,9 +59,9 @@ def match_boxes(left_results, right_results):
 
 
 def compute_depth(left_results, right_results, matches):
-    """Вычисление глубины на основе disparity."""
+    """Вычисление глубины для каждого bounding box'а."""
     global depth_history
-    depths = []
+    depths = {}
     left_boxes = left_results['absolute_boxes']
     right_boxes = right_results['absolute_boxes']
 
@@ -75,17 +75,19 @@ def compute_depth(left_results, right_results, matches):
         disparity = max(1, abs(left_center_x - right_center_x))  # Избегаем деления на 0
         depth = (FOCAL_LENGTH * BASELINE) / disparity
 
-        # 📌 Фильтрация глубины через медианный фильтр
-        obj_id = (left_box[1], left_box[0])  # Уникальный идентификатор объекта
+        # 📌 Фильтрация через медианный фильтр
+        obj_id = left_idx  # Один box = один depth
         if obj_id not in depth_history:
             depth_history[obj_id] = deque(maxlen=DEPTH_FILTER_SIZE)
 
         depth_history[obj_id].append(depth)
         filtered_depth = np.median(depth_history[obj_id])  # Медианное значение
 
-        depths.append((left_box[1], left_box[0], filtered_depth))  # (X, Y, Depth)
+        # ✅ Теперь каждый bounding box получает только одно значение глубины
+        depths[obj_id] = (left_box[1], left_box[0], filtered_depth)
 
-    return depths
+    return list(depths.values())  # Возвращаем список значений
+
 
 
 def draw_boxes(image, results, color=(0, 255, 0)):
