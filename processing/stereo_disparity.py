@@ -20,7 +20,6 @@ BASELINE = abs(T[0][0])  # Расстояние между камерами (м�
 FOCAL_LENGTH = mtxL[0, 0]  # Фокусное расстояние в пикселях
 
 print(f"🔧 Загрузка калибровки: baseline={BASELINE:.2f}mm, focal={FOCAL_LENGTH:.2f}px")
-models_dir = "data/models"
 
 # === 2. ИНИЦИАЛИЗАЦИЯ ФИЛЬТРА ГЛУБИНЫ ===
 depth_history = {}
@@ -178,6 +177,9 @@ try:
             processed_left = draw_depth(processed_left, depth_results)
 
             combined = cv2.hconcat([processed_left, processed_right])
+
+            cv2.namedWindow("Stereo Depth", cv2.WINDOW_NORMAL)  # Изменяемое окно
+            cv2.resizeWindow("Stereo Depth", 1920, 1080)  # Устанавливаем размер окна
             cv2.imshow("Stereo Depth", combined)
 
         if cv2.waitKey(1) & 0xFF == ord('q'):
