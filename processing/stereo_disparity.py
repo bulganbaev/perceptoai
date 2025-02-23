@@ -1,8 +1,6 @@
 import cv2
-import os
+import time
 import numpy as np
-from collections import deque
-from scipy.optimize import linear_sum_assignment  # Hungarian Algorithm
 from cam.camera_driver import CameraDriver
 from processing.hailo_detection import HailoInference, Processor
 
@@ -20,141 +18,59 @@ BASELINE = abs(T[0][0])  # Расстояние между камерами (м�
 FOCAL_LENGTH = mtxL[0, 0]  # Фокусное расстояние в пикселях
 
 print(f"🔧 Загрузка калибровки: baseline={BASELINE:.2f}mm, focal={FOCAL_LENGTH:.2f}px")
-models_dir = "data/models"
-
-# === 2. ИНИЦИАЛИЗАЦИЯ ФИЛЬТРА ГЛУБИНЫ ===
-depth_history = {}
-DEPTH_FILTER_SIZE = 5  # Размер фильтра
 
 
-def undistort_and_rectify(frame, mtx, dist):
-    """Исправление искажений на изображении."""
-    h, w = frame.shape[:2]
-    new_mtx, roi = cv2.getOptimalNewCameraMatrix(mtx, dist, (w, h), 1, (w, h))
-    return cv2.undistort(frame, mtx, dist, None, new_mtx)
+def compute_disparity(left_box, right_point):
+    """Вычисляет disparity (разницу X) между bbox слева и точкой справа."""
+    center_L_x = (left_box[1] + left_box[3]) // 2  # Центр X bbox в левой камере
+    center_R_x = right_point[0]  # X-координата найденной точки в правой камере
+
+    disparity = max(1, abs(center_L_x - center_R_x))  # Избегаем деления на 0
+    return disparity
 
 
-def compute_disparity_map(left_img, right_img):
-    """Рассчет карты глубины через disparity."""
-    gray_left = cv2.cvtColor(left_img, cv2.COLOR_BGR2GRAY)
-    gray_right = cv2.cvtColor(right_img, cv2.COLOR_BGR2GRAY)
-
-    stereo = cv2.StereoBM_create(numDisparities=64, blockSize=15)
-    disparity = stereo.compute(gray_left, gray_right).astype(np.float32)
-
-    disparity[disparity <= 0] = 1  # Избегаем деления на 0
-    depth_map = (FOCAL_LENGTH * BASELINE) / disparity  # Глубина по disparity
-
-    return depth_map
+def compute_depth(left_boxes, right_points):
+    """Вычисление глубины на основе disparity."""
+    depths = []
+    for left_box, right_pt in zip(left_boxes, right_points):
+        disparity = compute_disparity(left_box, right_pt)
+        depth = (FOCAL_LENGTH * BASELINE) / disparity  # Глубина в мм
+        depths.append((left_box[1], left_box[0], depth))  # (X, Y, Depth)
+    return depths
 
 
-def match_boxes(left_results, right_results):
-    """Сопоставление bounding box'ов по центрам и горизонтали."""
-    left_boxes = left_results["absolute_boxes"]
-    right_boxes = right_results["absolute_boxes"]
+def track_optical_flow(frame_left, frame_right, left_boxes):
+    """Оптический поток Lucas-Kanade для поиска точек объектов в правой камере."""
+    gray_left = cv2.cvtColor(frame_left, cv2.COLOR_BGR2GRAY)
+    gray_right = cv2.cvtColor(frame_right, cv2.COLOR_BGR2GRAY)
 
-    if not left_boxes or not right_boxes:
+    left_pts = np.array([[(x1 + x2) // 2, (y1 + y2) // 2] for (y1, x1, y2, x2) in left_boxes], dtype=np.float32)
+
+    if len(left_pts) == 0:
         return []
 
-    left_centers = np.array([(x1 + x2) // 2 for (_, x1, _, x2) in left_boxes])
-    right_centers = np.array([(x1 + x2) // 2 for (_, x1, _, x2) in right_boxes])
+    right_pts, status, _ = cv2.calcOpticalFlowPyrLK(gray_left, gray_right, left_pts, None)
 
-    cost_matrix = np.abs(left_centers[:, None] - right_centers[None, :])
+    matched_points = []
+    for i, (new, status_flag) in enumerate(zip(right_pts, status)):
+        if status_flag:
+            matched_points.append(new)  # Найденная точка в правой камере
 
-    left_indices, right_indices = linear_sum_assignment(cost_matrix)
-    matches = [(l, r) for l, r in zip(left_indices, right_indices)]
-
-    return matches
-
-
-def compute_depth(left_results, right_results, matches, depth_map):
-    """Вычисление глубины на основе disparity + медианный фильтр depth map."""
-    global depth_history
-    depths = {}
-    left_boxes = left_results['absolute_boxes']
-    right_boxes = right_results['absolute_boxes']
-
-    for left_idx, right_idx in matches:
-        left_box = left_boxes[left_idx]
-        right_box = right_boxes[right_idx]
-
-        left_center_x = (left_box[1] + left_box[3]) // 2
-        right_center_x = (right_box[1] + right_box[3]) // 2
-
-        disparity = max(1, abs(left_center_x - right_center_x))  # Избегаем деления на 0
-        raw_depth = (FOCAL_LENGTH * BASELINE) / disparity
-
-        x1, y1, x2, y2 = left_box
-        box_depth_values = depth_map[y1:y2, x1:x2]
-        box_depth_values = box_depth_values[box_depth_values > 0]
-
-        if len(box_depth_values) > 0:
-            filtered_depth = np.median(box_depth_values)
-        else:
-            filtered_depth = raw_depth
-
-        obj_id = left_idx
-        if obj_id not in depth_history:
-            depth_history[obj_id] = deque(maxlen=DEPTH_FILTER_SIZE)
-
-        depth_history[obj_id].append(filtered_depth)
-        final_depth = np.median(depth_history[obj_id])
-
-        depths[obj_id] = (left_box[1], left_box[0], final_depth)
-
-    return list(depths.values())
+    return matched_points
 
 
-def draw_boxes(image, results, color=(0, 255, 0)):
-    """Отрисовка bbox."""
-    for (y1, x1, y2, x2), class_id, score in zip(results['absolute_boxes'], results['detection_classes'],
-                                                 results['detection_scores']):
-        if class_id == 0:
-            label = f"Person ({score:.2f})"
-            cv2.rectangle(image, (x1, y1), (x2, y2), color, 2)
-            cv2.putText(image, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
-    return image
-
-
-def draw_depth(image, depth_results):
-    """Отрисовка глубины на изображении."""
-    for x, y, d in depth_results:
-        cv2.putText(image, f"Depth: {d:.1f} mm", (x, y), cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 255, 255), 3)
-    return image
-
-
-def choose_model():
-    """Выбор модели перед запуском."""
-    model_files = [f for f in os.listdir(models_dir) if f.endswith(".hef")]
-
-    print("\n📌 Доступные модели:")
-    for i, model in enumerate(model_files):
-        print(f"  {i + 1}. {model}")
-
-    while True:
-        try:
-            choice = int(input("\n👉 Выберите номер модели: ")) - 1
-            if 0 <= choice < len(model_files):
-                return os.path.join(models_dir, model_files[choice])
-            else:
-                print("❌ Неверный ввод. Попробуйте снова.")
-        except ValueError:
-            print("❌ Введите число!")
-
-
-# === 3. ЗАПУСК КАМЕР И МОДЕЛИ ===
-model_path = choose_model()
-print(f"🚀 Запуск с моделью: {model_path}")
-
-inf = HailoInference(model_path)
+# === 2. ИНИЦИАЛИЗАЦИЯ ДЕТЕКЦИИ ===
+inf = HailoInference('data/models/yolov11s.hef', 'data/labels/coco.txt')
 proc = Processor(inf, conf=0.5)
 
+# === 3. ЗАПУСК КАМЕР ===
 cam_left = CameraDriver(camera_id=0)
 cam_right = CameraDriver(camera_id=1)
+
 cam_left.start_camera()
 cam_right.start_camera()
 
-print("🎥 Запуск стереопотока с расчетом глубины. Нажмите 'q' для выхода.")
+print("🎥 Запуск стрима. Нажмите 'q' для выхода.")
 
 try:
     while True:
@@ -162,34 +78,57 @@ try:
         frame_right = cam_right.get_frame()
 
         if frame_left is not None and frame_right is not None:
-            frame_left = undistort_and_rectify(frame_left, mtxL, distL)
-            frame_right = undistort_and_rectify(frame_right, mtxR, distR)
+            # Запуск детекции только для левой камеры
+            detections = proc.process([frame_left])
 
-            depth_map = compute_disparity_map(frame_left, frame_right)  # Расчет карты глубины
+            # Фильтруем только class=0 (обычно это 'person' в COCO)
+            for result in detections:
+                filtered_boxes = []
+                filtered_scores = []
+                filtered_classes = []
 
-            detections = proc.process([frame_left, frame_right])
-            result_left, result_right = detections[0], detections[1]
+                for i, class_id in enumerate(result['detection_classes']):
+                    if class_id == 0:  # Фильтруем только class=0
+                        filtered_boxes.append(result['absolute_boxes'][i])
+                        filtered_scores.append(result['detection_scores'][i])
+                        filtered_classes.append(class_id)
 
-            matches = match_boxes(result_left, result_right)
-            depth_results = compute_depth(result_left, result_right, matches, depth_map)
+                # Обновляем результаты и рисуем боксы только для class=0
+                result.update({
+                    'absolute_boxes': filtered_boxes,
+                    'detection_classes': filtered_classes,
+                    'detection_scores': filtered_scores
+                })
 
-            processed_left = draw_boxes(frame_left, result_left)
-            processed_right = draw_boxes(frame_right, result_right)
+                frame_left = proc.label_loader.draw_boxes(result)
 
-            processed_left = draw_depth(processed_left, depth_results)
-            processed_right = draw_depth(processed_right, depth_results)
+                # === 4. ОПТИЧЕСКИЙ ПОТОК ДЛЯ ПОИСКА ТОЧЕК В ПРАВОЙ КАМЕРЕ ===
+                right_points = track_optical_flow(frame_left, frame_right, filtered_boxes)
 
-            combined = cv2.hconcat([processed_left, processed_right])
-            cv2.namedWindow("Stereo Depth", cv2.WINDOW_NORMAL)  # Делаем окно изменяемым
-            cv2.resizeWindow("Stereo Depth", 1920, 1080)
-            cv2.imshow("Stereo Depth", combined)
+                # === 5. ВЫЧИСЛЕНИЕ ГЛУБИНЫ ===
+                depth_results = compute_depth(filtered_boxes, right_points)
 
+                # === 6. ОТОБРАЖЕНИЕ ГЛУБИНЫ ===
+                for x, y, d in depth_results:
+                    cv2.putText(frame_left, f"Depth: {d:.1f} mm", (x, y),
+                                cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 255, 255), 3)
+
+            # Объединяем левый и правый кадр
+            combined_frame = cv2.hconcat([frame_left, frame_right])
+
+            # Отображение окна
+            cv2.namedWindow("Stereo Stream", cv2.WINDOW_NORMAL)
+            cv2.resizeWindow("Stereo Stream", 1920, 1080)
+            cv2.imshow("Stereo Stream", combined_frame)
+
+        # Выход по 'q'
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
 
 except KeyboardInterrupt:
     print("⏹️ Остановка потока...")
 
+# Завершаем работу камер
 cam_left.stop_camera()
 cam_right.stop_camera()
 cv2.destroyAllWindows()
