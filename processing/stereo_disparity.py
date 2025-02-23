@@ -35,7 +35,7 @@ def undistort_and_rectify(frame, mtx, dist):
 
 
 def match_boxes(left_results, right_results):
-    """Сопоставление объектов между левым и правым изображением."""
+    """Сопоставление bounding box'ов по центрам и горизонтали."""
     left_boxes = left_results["absolute_boxes"]
     right_boxes = right_results["absolute_boxes"]
 
@@ -46,20 +46,19 @@ def match_boxes(left_results, right_results):
     left_centers = np.array([(x1 + x2) // 2 for (_, x1, _, x2) in left_boxes])
     right_centers = np.array([(x1 + x2) // 2 for (_, x1, _, x2) in right_boxes])
 
-    # Создаём матрицу расстояний
+    # Строим матрицу расстояний только по X
     cost_matrix = np.abs(left_centers[:, None] - right_centers[None, :])
 
-    # Применяем алгоритм Венгера для нахождения оптимального соответствия
+    # Применяем алгоритм Венгера
     left_indices, right_indices = linear_sum_assignment(cost_matrix)
 
-    # Формируем список сопоставлений (индекс_в_левом, индекс_в_правом)
     matches = [(l, r) for l, r in zip(left_indices, right_indices)]
 
     return matches
 
 
-def compute_depth(left_results, right_results, matches):
-    """Вычисление глубины для каждого bounding box'а."""
+def compute_depth(left_results, right_results, matches, depth_map):
+    """Вычисление глубины на основе disparity + медианный фильтр depth map."""
     global depth_history
     depths = {}
     left_boxes = left_results['absolute_boxes']
@@ -73,21 +72,30 @@ def compute_depth(left_results, right_results, matches):
         right_center_x = (right_box[1] + right_box[3]) // 2
 
         disparity = max(1, abs(left_center_x - right_center_x))  # Избегаем деления на 0
-        depth = (FOCAL_LENGTH * BASELINE) / disparity
+        raw_depth = (FOCAL_LENGTH * BASELINE) / disparity  # Грубый расчет глубины
 
-        # 📌 Фильтрация через медианный фильтр
-        obj_id = left_idx  # Один box = один depth
+        # 📌 Извлекаем глубину из карты глубины
+        x1, y1, x2, y2 = left_box
+        box_depth_values = depth_map[y1:y2, x1:x2]  # Вырезаем область bbox
+        box_depth_values = box_depth_values[box_depth_values > 0]  # Убираем нули
+
+        if len(box_depth_values) > 0:
+            filtered_depth = np.median(box_depth_values)  # Фильтр по depth map
+        else:
+            filtered_depth = raw_depth  # Если нет данных, берем disparity-based
+
+        # 📌 Запоминаем медианное значение через историю
+        obj_id = left_idx
         if obj_id not in depth_history:
             depth_history[obj_id] = deque(maxlen=DEPTH_FILTER_SIZE)
 
-        depth_history[obj_id].append(depth)
-        filtered_depth = np.median(depth_history[obj_id])  # Медианное значение
+        depth_history[obj_id].append(filtered_depth)
+        final_depth = np.median(depth_history[obj_id])  # Итоговый фильтр
 
         # ✅ Теперь каждый bounding box получает только одно значение глубины
-        depths[obj_id] = (left_box[1], left_box[0], filtered_depth)
+        depths[obj_id] = (left_box[1], left_box[0], final_depth)
 
-    return list(depths.values())  # Возвращаем список значений
-
+    return list(depths.values())  # Возвращаем один depth на каждый bbox
 
 
 def draw_boxes(image, results, color=(0, 255, 0)):
