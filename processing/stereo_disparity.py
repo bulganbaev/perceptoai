@@ -49,8 +49,8 @@ def compute_disparity(left_bbox, right_bbox):
     return disparity, center_L_x, left_bbox[0]  # (disparity, X, Y)
 
 
-def compute_depth(left_results, right_results, matches):
-    """Вычисление стабильной глубины (1 значение на объект)"""
+def compute_depth(left_results, right_results, matches, depth_map):
+    """Вычисление min/max глубины (1 значение + диапазон)"""
     global depth_history
     depths = {}
 
@@ -59,15 +59,27 @@ def compute_depth(left_results, right_results, matches):
         disparity, obj_x, obj_y = compute_disparity(left_box, right_box)
         raw_depth = (FOCAL_LENGTH * BASELINE) / disparity  # Глубина в мм
 
+        # Глубина по всей области bbox
+        x1, y1, x2, y2 = left_box
+        box_depth_values = depth_map[y1:y2, x1:x2]
+        box_depth_values = box_depth_values[box_depth_values > 0]
+
+        if len(box_depth_values) > 0:
+            min_depth = np.min(box_depth_values)
+            max_depth = np.max(box_depth_values)
+            filtered_depth = np.median(box_depth_values)
+        else:
+            min_depth = max_depth = filtered_depth = raw_depth
+
         obj_id = left_idx
         if obj_id not in depth_history:
             depth_history[obj_id] = deque(maxlen=DEPTH_FILTER_SIZE)
-        depth_history[obj_id].append(raw_depth)
+        depth_history[obj_id].append(filtered_depth)
         final_depth = np.median(depth_history[obj_id])  # Усредняем depth
 
-        depths[obj_id] = (obj_x, obj_y, final_depth)  # (X, Y, Depth)
+        depths[obj_id] = (obj_x, obj_y, final_depth, min_depth, max_depth)  # (X, Y, Depth, Min, Max)
 
-    return list(depths.values())  # Выводим только 1 depth на объект
+    return list(depths.values())  # Выводим 1 depth + диапазон на объект
 
 
 def match_boxes(left_results, right_results):
@@ -94,13 +106,13 @@ def draw_boxes(image, results):
 
 
 def draw_depth(image, depth_results):
-    """Отрисовка глубины (1 значение на объект)"""
-    for x, y, d in depth_results:
-        cv2.putText(image, f"{d:.1f} mm", (x, y), cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 255, 255), 3)
+    """Отрисовка глубины (1 значение + диапазон)"""
+    for x, y, d, d_min, d_max in depth_results:
+        text = f"{d:.1f}mm ({d_min:.1f}-{d_max:.1f}mm)"
+        cv2.putText(image, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (255, 255, 255), 3)
     return image
 
 
-# === 4. ВЫБОР МОДЕЛИ ===
 def choose_model():
     """Выбор модели перед запуском"""
     models_dir = "data/models"
@@ -139,14 +151,13 @@ try:
         if frame_left is not None and frame_right is not None:
             detections = proc.process([frame_left, frame_right])
 
-            # Фильтрация только class=0 (человек)
             result_left, result_right = filter_people(detections[0]), filter_people(detections[1])
 
             matches = match_boxes(result_left, result_right)
-            depth_results = compute_depth(result_left, result_right, matches)
+            depth_results = compute_depth(result_left, result_right, matches, np.zeros_like(frame_left[:, :, 0]))  # Заменить на depth_map
 
             processed_left = draw_boxes(frame_left, result_left)
-            processed_left = draw_depth(processed_left, depth_results)  # 1 depth на объект
+            processed_left = draw_depth(processed_left, depth_results)
 
             combined = cv2.hconcat([processed_left, frame_right])
             cv2.namedWindow("Stereo Depth", cv2.WINDOW_NORMAL)
