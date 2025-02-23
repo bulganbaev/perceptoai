@@ -2,36 +2,36 @@ import cv2
 import os
 import numpy as np
 from collections import deque
-from scipy.optimize import linear_sum_assignment
+from scipy.optimize import linear_sum_assignment  # Hungarian Algorithm
 from cam.camera_driver import CameraDriver
 from processing.hailo_detection import HailoInference, Processor
 
-# === 1. ЗАГРУЗКА КАЛИБРОВКИ ===
+# === 1. ЗАГРУЗКА ПАРАМЕТРОВ КАЛИБРОВКИ ===
 calib_data = np.load("data/calibration/calibration_data.npz")
 
-mtxL, distL = calib_data["mtxL"], calib_data["distL"]
-mtxR, distR = calib_data["mtxR"], calib_data["distR"]
-R, T = calib_data["R"], calib_data["T"]
+mtxL = calib_data["mtxL"]
+distL = calib_data["distL"]
+mtxR = calib_data["mtxR"]
+distR = calib_data["distR"]
+R = calib_data["R"]
+T = calib_data["T"]
 
 BASELINE = abs(T[0][0])  # Расстояние между камерами (мм)
-FOCAL_LENGTH = mtxL[0, 0]  # Фокусное расстояние (пиксели)
+FOCAL_LENGTH = mtxL[0, 0]  # Фокусное расстояние в пикселях
 
-# === 2. ФИЛЬТР ДЛЯ СТАБИЛЬНОГО DEPTH ===
+print(f"🔧 Загрузка калибровки: baseline={BASELINE:.2f}mm, focal={FOCAL_LENGTH:.2f}px")
+models_dir = "data/models"
+
+# === 2. ИНИЦИАЛИЗАЦИЯ ФИЛЬТРА ГЛУБИНЫ ===
 depth_history = {}
-DEPTH_FILTER_SIZE = 5  # Размер скользящего окна
+DEPTH_FILTER_SIZE = 5  # Размер фильтра
 
-# === 3. ФУНКЦИИ ===
-def filter_people(results):
-    """Фильтрует только class=0 (человек)"""
-    filtered_boxes, filtered_scores = [], []
 
-    for i, class_id in enumerate(results['detection_classes']):
-        if class_id == 0:
-            filtered_boxes.append(results['absolute_boxes'][i])
-            filtered_scores.append(results['detection_scores'][i])
-
-    results.update({'absolute_boxes': filtered_boxes, 'detection_scores': filtered_scores})
-    return results
+def undistort_and_rectify(frame, mtx, dist):
+    """Исправление искажений на изображении."""
+    h, w = frame.shape[:2]
+    new_mtx, roi = cv2.getOptimalNewCameraMatrix(mtx, dist, (w, h), 1, (w, h))
+    return cv2.undistort(frame, mtx, dist, None, new_mtx)
 
 
 def compute_disparity_map(left_img, right_img):
@@ -49,8 +49,10 @@ def compute_disparity_map(left_img, right_img):
 
 
 def match_boxes(left_results, right_results):
-    """Сопоставление bbox по X-координатам (Hungarian Algorithm)"""
-    left_boxes, right_boxes = left_results["absolute_boxes"], right_results["absolute_boxes"]
+    """Сопоставление bounding box'ов по центрам и горизонтали."""
+    left_boxes = left_results["absolute_boxes"]
+    right_boxes = right_results["absolute_boxes"]
+
     if not left_boxes or not right_boxes:
         return []
 
@@ -58,100 +60,124 @@ def match_boxes(left_results, right_results):
     right_centers = np.array([(x1 + x2) // 2 for (_, x1, _, x2) in right_boxes])
 
     cost_matrix = np.abs(left_centers[:, None] - right_centers[None, :])
+
     left_indices, right_indices = linear_sum_assignment(cost_matrix)
-    return [(l, r) for l, r in zip(left_indices, right_indices)]
+    matches = [(l, r) for l, r in zip(left_indices, right_indices)]
+
+    return matches
 
 
 def compute_depth(left_results, right_results, matches, depth_map):
-    """Вычисление min/max глубины (1 значение + диапазон)"""
+    """Вычисление глубины на основе disparity + медианный фильтр depth map."""
     global depth_history
     depths = {}
+    left_boxes = left_results['absolute_boxes']
+    right_boxes = right_results['absolute_boxes']
 
     for left_idx, right_idx in matches:
-        left_box, right_box = left_results['absolute_boxes'][left_idx], right_results['absolute_boxes'][right_idx]
-        x1, y1, x2, y2 = left_box
+        left_box = left_boxes[left_idx]
+        right_box = right_boxes[right_idx]
 
-        # Берем среднее по области bbox
+        left_center_x = (left_box[1] + left_box[3]) // 2
+        right_center_x = (right_box[1] + right_box[3]) // 2
+
+        disparity = max(1, abs(left_center_x - right_center_x))  # Избегаем деления на 0
+        raw_depth = (FOCAL_LENGTH * BASELINE) / disparity
+
+        x1, y1, x2, y2 = left_box
         box_depth_values = depth_map[y1:y2, x1:x2]
         box_depth_values = box_depth_values[box_depth_values > 0]
 
         if len(box_depth_values) > 0:
-            min_depth = np.min(box_depth_values)
-            max_depth = np.max(box_depth_values)
             filtered_depth = np.median(box_depth_values)
         else:
-            min_depth = max_depth = filtered_depth = 0  # Если нет данных
+            filtered_depth = raw_depth
 
         obj_id = left_idx
         if obj_id not in depth_history:
             depth_history[obj_id] = deque(maxlen=DEPTH_FILTER_SIZE)
+
         depth_history[obj_id].append(filtered_depth)
-        final_depth = np.median(depth_history[obj_id])  # Усредняем depth
+        final_depth = np.median(depth_history[obj_id])
 
-        depths[obj_id] = (x1, y1, final_depth, min_depth, max_depth)  # (X, Y, Depth, Min, Max)
+        depths[obj_id] = (left_box[1], left_box[0], final_depth)
 
-    return list(depths.values())  # Выводим 1 depth + диапазон на объект
-
-
-def draw_depth_overlay(image, depth_map, bbox):
-    """Накладывает Depth Map на Bounding Box"""
-    x1, y1, x2, y2 = bbox
-    depth_bbox = depth_map[y1:y2, x1:x2]
-
-    if depth_bbox.size > 0:
-        depth_bbox = cv2.normalize(depth_bbox, None, 0, 255, cv2.NORM_MINMAX)
-        depth_bbox = cv2.applyColorMap(depth_bbox.astype(np.uint8), cv2.COLORMAP_JET)
-
-        image[y1:y2, x1:x2] = cv2.addWeighted(image[y1:y2, x1:x2], 0.5, depth_bbox, 0.5, 0)
-
-    return image
+    return list(depths.values())
 
 
-def draw_boxes(image, results, depth_map):
-    """Отрисовка bbox + depth overlay"""
-    for (y1, x1, y2, x2), score in zip(results['absolute_boxes'], results['detection_scores']):
-        image = draw_depth_overlay(image, depth_map, (x1, y1, x2, y2))  # Наложение Depth Map
+def filter_objects(results):
+    """Оставляет только объекты с class_id == 0 (человек)."""
+    filtered_boxes = []
+    filtered_scores = []
+    filtered_classes = []
+
+    for i, class_id in enumerate(results['detection_classes']):
+        if class_id == 0:  # Только человек
+            filtered_boxes.append(results['absolute_boxes'][i])
+            filtered_scores.append(results['detection_scores'][i])
+            filtered_classes.append(class_id)
+
+    results.update({
+        'absolute_boxes': filtered_boxes,
+        'detection_classes': filtered_classes,
+        'detection_scores': filtered_scores
+    })
+
+
+def draw_boxes(image, results, color=(0, 255, 0)):
+    """Отрисовка bbox."""
+    for (y1, x1, y2, x2), class_id, score in zip(results['absolute_boxes'], results['detection_classes'],
+                                                 results['detection_scores']):
         label = f"Person ({score:.2f})"
-        cv2.rectangle(image, (x1, y1), (x2, y2), (0, 255, 0), 2)
-        cv2.putText(image, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+        cv2.rectangle(image, (x1, y1), (x2, y2), color, 2)
+        cv2.putText(image, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
     return image
 
 
 def draw_depth(image, depth_results):
-    """Отрисовка глубины (1 значение + диапазон)"""
-    for x, y, d, d_min, d_max in depth_results:
-        text = f"{d:.1f}mm ({d_min:.1f}-{d_max:.1f}mm)"
-        cv2.putText(image, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (255, 255, 255), 3)
+    """Отрисовка глубины на изображении."""
+    for x, y, d in depth_results:
+        cv2.putText(image, f"Depth: {d:.1f} mm", (x, y), cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 255, 255), 3)
     return image
 
 
-# === 4. ЗАПУСК КАМЕР И ДЕТЕКЦИИ ===
-inf = HailoInference('data/models/yolov11s.hef')
+# === 3. ЗАПУСК КАМЕР И МОДЕЛИ ===
+inf = HailoInference("data/models/yolov11s.hef")
 proc = Processor(inf, conf=0.5)
 
-cam_left, cam_right = CameraDriver(camera_id=0), CameraDriver(camera_id=1)
-cam_left.start_camera(), cam_right.start_camera()
+cam_left = CameraDriver(camera_id=0)
+cam_right = CameraDriver(camera_id=1)
+cam_left.start_camera()
+cam_right.start_camera()
 
-print("🎥 Запуск стереопотока. Нажмите 'q' для выхода.")
+print("🎥 Запуск стереопотока с расчетом глубины. Нажмите 'q' для выхода.")
 
 try:
     while True:
-        frame_left, frame_right = cam_left.get_frame(), cam_right.get_frame()
+        frame_left = cam_left.get_frame()
+        frame_right = cam_right.get_frame()
+
         if frame_left is not None and frame_right is not None:
-            depth_map = compute_disparity_map(frame_left, frame_right)  # Карта глубины
+            frame_left = undistort_and_rectify(frame_left, mtxL, distL)
+            frame_right = undistort_and_rectify(frame_right, mtxR, distR)
+
+            depth_map = compute_disparity_map(frame_left, frame_right)  # Расчет карты глубины
 
             detections = proc.process([frame_left, frame_right])
-            result_left, result_right = filter_people(detections[0]), filter_people(detections[1])
+            result_left, result_right = detections[0], detections[1]
+
+            filter_objects(result_left)
+            filter_objects(result_right)
 
             matches = match_boxes(result_left, result_right)
             depth_results = compute_depth(result_left, result_right, matches, depth_map)
 
-            processed_left = draw_boxes(frame_left, result_left, depth_map)  # Теперь с Depth Overlay
+            processed_left = draw_boxes(frame_left, result_left)
+            processed_right = draw_boxes(frame_right, result_right)
+
             processed_left = draw_depth(processed_left, depth_results)
 
-            combined = cv2.hconcat([processed_left, frame_right])
-            cv2.namedWindow("Stereo Depth", cv2.WINDOW_NORMAL)
-            cv2.resizeWindow("Stereo Depth", 1920, 1080)
+            combined = cv2.hconcat([processed_left, processed_right])
             cv2.imshow("Stereo Depth", combined)
 
         if cv2.waitKey(1) & 0xFF == ord('q'):
