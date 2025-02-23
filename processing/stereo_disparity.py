@@ -22,8 +22,8 @@ FOCAL_LENGTH = mtxL[0, 0]  # Фокусное расстояние в пиксе
 print(f"🔧 Загрузка калибровки: baseline={BASELINE:.2f}mm, focal={FOCAL_LENGTH:.2f}px")
 models_dir = "data/models"
 
-# === 2. ИНИЦИАЛИЗАЦИЯ ОЧЕРЕДИ ДЛЯ ФИЛЬТРАЦИИ ГЛУБИНЫ ===
-depth_history = {}  # Храним последние измерения глубины
+# === 2. ИНИЦИАЛИЗАЦИЯ ФИЛЬТРА ГЛУБИНЫ ===
+depth_history = {}  # Кэш глубины для медианного фильтра
 DEPTH_FILTER_SIZE = 5  # Количество последних измерений для медианного фильтра
 
 
@@ -34,58 +34,56 @@ def undistort_and_rectify(frame, mtx, dist):
     return cv2.undistort(frame, mtx, dist, None, new_mtx)
 
 
-def track_optical_flow(frame_left, frame_right, left_boxes):
-    """Оптический поток для сопоставления объектов."""
-    gray_left = cv2.cvtColor(frame_left, cv2.COLOR_BGR2GRAY)
-    gray_right = cv2.cvtColor(frame_right, cv2.COLOR_BGR2GRAY)
+def match_boxes(left_results, right_results):
+    """Сопоставление объектов между левым и правым изображением."""
+    left_boxes = left_results["absolute_boxes"]
+    right_boxes = right_results["absolute_boxes"]
 
-    left_pts = np.array([[(x1 + x2) // 2, (y1 + y2) // 2] for (y1, x1, y2, x2) in left_boxes], dtype=np.float32)
-
-    if len(left_pts) == 0:
+    if not left_boxes or not right_boxes:
         return []
 
-    right_pts, status, _ = cv2.calcOpticalFlowPyrLK(gray_left, gray_right, left_pts, None)
+    # Вычисляем центры bounding box'ов
+    left_centers = np.array([(x1 + x2) // 2 for (_, x1, _, x2) in left_boxes])
+    right_centers = np.array([(x1 + x2) // 2 for (_, x1, _, x2) in right_boxes])
 
-    matches = []
-    for i, (new, status_flag) in enumerate(zip(right_pts, status)):
-        if status_flag:
-            matches.append((i, new))  # (индекс в левой камере, найденная точка в правой камере)
+    # Создаём матрицу расстояний
+    cost_matrix = np.abs(left_centers[:, None] - right_centers[None, :])
+
+    # Применяем алгоритм Венгера для нахождения оптимального соответствия
+    left_indices, right_indices = linear_sum_assignment(cost_matrix)
+
+    # Формируем список сопоставлений (индекс_в_левом, индекс_в_правом)
+    matches = [(l, r) for l, r in zip(left_indices, right_indices)]
 
     return matches
 
 
 def compute_depth(left_results, right_results, matches):
-    """Вычисление глубины с учетом disparity и медианного фильтра."""
+    """Вычисление глубины на основе disparity."""
     global depth_history
     depths = []
     left_boxes = left_results['absolute_boxes']
     right_boxes = right_results['absolute_boxes']
 
-    for i, right_pt in matches:
-        left_box = left_boxes[i]
+    for left_idx, right_idx in matches:
+        left_box = left_boxes[left_idx]
+        right_box = right_boxes[right_idx]
 
-        best_match, min_dist = None, float('inf')
-        for j, right_box in enumerate(right_boxes):
-            center_R_x = (right_box[1] + right_box[3]) // 2  # Центр X bbox справа
-            dist = abs(center_R_x - right_pt[0])
+        left_center_x = (left_box[1] + left_box[3]) // 2
+        right_center_x = (right_box[1] + right_box[3]) // 2
 
-            if dist < min_dist:
-                min_dist, best_match = dist, j
+        disparity = max(1, abs(left_center_x - right_center_x))  # Избегаем деления на 0
+        depth = (FOCAL_LENGTH * BASELINE) / disparity
 
-        if best_match is not None:
-            right_box = right_boxes[best_match]
-            disparity = max(1, abs(left_box[1] - right_box[1]))  # Избегаем деления на 0
-            depth = (FOCAL_LENGTH * BASELINE) / disparity
+        # 📌 Фильтрация глубины через медианный фильтр
+        obj_id = (left_box[1], left_box[0])  # Уникальный идентификатор объекта
+        if obj_id not in depth_history:
+            depth_history[obj_id] = deque(maxlen=DEPTH_FILTER_SIZE)
 
-            # 📌 Фильтрация глубины через медианный фильтр
-            obj_id = (left_box[1], left_box[0])  # Идентификатор объекта
-            if obj_id not in depth_history:
-                depth_history[obj_id] = deque(maxlen=DEPTH_FILTER_SIZE)
+        depth_history[obj_id].append(depth)
+        filtered_depth = np.median(depth_history[obj_id])  # Медианное значение
 
-            depth_history[obj_id].append(depth)
-            filtered_depth = np.median(depth_history[obj_id])  # Медианное значение
-
-            depths.append((left_box[1], left_box[0], filtered_depth))  # (X, Y, Depth)
+        depths.append((left_box[1], left_box[0], filtered_depth))  # (X, Y, Depth)
 
     return depths
 
@@ -94,8 +92,8 @@ def draw_boxes(image, results, color=(0, 255, 0)):
     """Отрисовка bbox."""
     for (y1, x1, y2, x2), class_id, score in zip(results['absolute_boxes'], results['detection_classes'],
                                                  results['detection_scores']):
-        if class_id == 2:
-            label = f"Car ({score:.2f})"
+        if class_id == 0:
+            label = f"Person ({score:.2f})"
             cv2.rectangle(image, (x1, y1), (x2, y2), color, 2)
             cv2.putText(image, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
     return image
@@ -109,7 +107,7 @@ def draw_depth(image, depth_results):
 
 
 def choose_model():
-    """Выбираем модель перед запуском"""
+    """Выбор модели перед запуском."""
     model_files = [f for f in os.listdir(models_dir) if f.endswith(".hef")]
 
     print("\n📌 Доступные модели:")
@@ -153,7 +151,7 @@ try:
             detections = proc.process([frame_left, frame_right])
             result_left, result_right = detections[0], detections[1]
 
-            matches = track_optical_flow(frame_left, frame_right, result_left['absolute_boxes'])
+            matches = match_boxes(result_left, result_right)
             depth_results = compute_depth(result_left, result_right, matches)
 
             processed_left = draw_boxes(frame_left, result_left, color=(0, 255, 0))
