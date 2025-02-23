@@ -94,8 +94,8 @@ def draw_boxes(image, results, color=(0, 255, 0)):
     """Отрисовка bbox."""
     for (y1, x1, y2, x2), class_id, score in zip(results['absolute_boxes'], results['detection_classes'],
                                                  results['detection_scores']):
-        if class_id == 0:
-            label = f"Person ({score:.2f})"
+        if class_id == 2:
+            label = f"Car ({score:.2f})"
             cv2.rectangle(image, (x1, y1), (x2, y2), color, 2)
             cv2.putText(image, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
     return image
