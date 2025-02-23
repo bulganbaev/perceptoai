@@ -23,8 +23,8 @@ print(f"🔧 Загрузка калибровки: baseline={BASELINE:.2f}mm, f
 models_dir = "data/models"
 
 # === 2. ИНИЦИАЛИЗАЦИЯ ФИЛЬТРА ГЛУБИНЫ ===
-depth_history = {}  # Кэш глубины для медианного фильтра
-DEPTH_FILTER_SIZE = 5  # Количество последних измерений для медианного фильтра
+depth_history = {}
+DEPTH_FILTER_SIZE = 5  # Размер фильтра
 
 
 def undistort_and_rectify(frame, mtx, dist):
@@ -42,23 +42,19 @@ def match_boxes(left_results, right_results):
     if not left_boxes or not right_boxes:
         return []
 
-    # Вычисляем центры bounding box'ов
     left_centers = np.array([(x1 + x2) // 2 for (_, x1, _, x2) in left_boxes])
     right_centers = np.array([(x1 + x2) // 2 for (_, x1, _, x2) in right_boxes])
 
-    # Строим матрицу расстояний только по X
     cost_matrix = np.abs(left_centers[:, None] - right_centers[None, :])
 
-    # Применяем алгоритм Венгера
     left_indices, right_indices = linear_sum_assignment(cost_matrix)
-
     matches = [(l, r) for l, r in zip(left_indices, right_indices)]
 
     return matches
 
 
 def compute_depth(left_results, right_results, matches, depth_map):
-    """Вычисление глубины на основе disparity + медианный фильтр depth map."""
+    """Вычисление глубины на основе disparity + depth map."""
     global depth_history
     depths = {}
     left_boxes = left_results['absolute_boxes']
@@ -72,30 +68,27 @@ def compute_depth(left_results, right_results, matches, depth_map):
         right_center_x = (right_box[1] + right_box[3]) // 2
 
         disparity = max(1, abs(left_center_x - right_center_x))  # Избегаем деления на 0
-        raw_depth = (FOCAL_LENGTH * BASELINE) / disparity  # Грубый расчет глубины
+        raw_depth = (FOCAL_LENGTH * BASELINE) / disparity
 
-        # 📌 Извлекаем глубину из карты глубины
         x1, y1, x2, y2 = left_box
-        box_depth_values = depth_map[y1:y2, x1:x2]  # Вырезаем область bbox
-        box_depth_values = box_depth_values[box_depth_values > 0]  # Убираем нули
+        box_depth_values = depth_map[y1:y2, x1:x2]
+        box_depth_values = box_depth_values[box_depth_values > 0]
 
         if len(box_depth_values) > 0:
-            filtered_depth = np.median(box_depth_values)  # Фильтр по depth map
+            filtered_depth = np.median(box_depth_values)
         else:
-            filtered_depth = raw_depth  # Если нет данных, берем disparity-based
+            filtered_depth = raw_depth
 
-        # 📌 Запоминаем медианное значение через историю
         obj_id = left_idx
         if obj_id not in depth_history:
             depth_history[obj_id] = deque(maxlen=DEPTH_FILTER_SIZE)
 
         depth_history[obj_id].append(filtered_depth)
-        final_depth = np.median(depth_history[obj_id])  # Итоговый фильтр
+        final_depth = np.median(depth_history[obj_id])
 
-        # ✅ Теперь каждый bounding box получает только одно значение глубины
         depths[obj_id] = (left_box[1], left_box[0], final_depth)
 
-    return list(depths.values())  # Возвращаем один depth на каждый bbox
+    return list(depths.values())
 
 
 def draw_boxes(image, results, color=(0, 255, 0)):
@@ -110,19 +103,44 @@ def draw_boxes(image, results, color=(0, 255, 0)):
 
 
 def draw_depth(image, depth_results):
-    """Отрисовка метки глубины на изображении."""
+    """Отрисовка глубины на изображении."""
     for x, y, d in depth_results:
         cv2.putText(image, f"Depth: {d:.1f} mm", (x, y), cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 255, 255), 3)
     return image
 
 
-# === 3. ЗАПУСК КАМЕР И ДЕТЕКЦИИ ===
-print("🚀 Запуск стереопотока с расчетом глубины. Нажмите 'q' для выхода.")
+def choose_model():
+    """Выбор модели перед запуском."""
+    model_files = [f for f in os.listdir(models_dir) if f.endswith(".hef")]
+
+    print("\n📌 Доступные модели:")
+    for i, model in enumerate(model_files):
+        print(f"  {i + 1}. {model}")
+
+    while True:
+        try:
+            choice = int(input("\n👉 Выберите номер модели: ")) - 1
+            if 0 <= choice < len(model_files):
+                return os.path.join(models_dir, model_files[choice])
+            else:
+                print("❌ Неверный ввод. Попробуйте снова.")
+        except ValueError:
+            print("❌ Введите число!")
+
+
+# === 3. ЗАПУСК КАМЕР И МОДЕЛИ ===
+model_path = choose_model()
+print(f"🚀 Запуск с моделью: {model_path}")
+
+inf = HailoInference(model_path)
+proc = Processor(inf, conf=0.5)
 
 cam_left = CameraDriver(camera_id=0)
 cam_right = CameraDriver(camera_id=1)
 cam_left.start_camera()
 cam_right.start_camera()
+
+print("🎥 Запуск стереопотока с расчетом глубины. Нажмите 'q' для выхода.")
 
 try:
     while True:
@@ -136,8 +154,7 @@ try:
             detections = proc.process([frame_left, frame_right])
             result_left, result_right = detections[0], detections[1]
 
-            # Получаем карту глубины (нужно заменить на свою реализацию)
-            depth_map = np.zeros_like(frame_left[:, :, 0])  # Заглушка, сюда подставить реальный depth_map
+            depth_map = np.zeros_like(frame_left[:, :, 0])  # Заглушка, заменишь на реальную depth map
 
             matches = match_boxes(result_left, result_right)
             depth_results = compute_depth(result_left, result_right, matches, depth_map)
