@@ -21,6 +21,26 @@ depth_history = {}
 DEPTH_FILTER_SIZE = 5  # Размер скользящего окна
 
 # === 3. ФУНКЦИИ ===
+def filter_people(results):
+    """Фильтрует только class=0 (человек)"""
+    filtered_boxes = []
+    filtered_scores = []
+    filtered_classes = []
+
+    for i, class_id in enumerate(results['detection_classes']):
+        if class_id == 0:
+            filtered_boxes.append(results['absolute_boxes'][i])
+            filtered_scores.append(results['detection_scores'][i])
+            filtered_classes.append(class_id)
+
+    results.update({
+        'absolute_boxes': filtered_boxes,
+        'detection_classes': filtered_classes,
+        'detection_scores': filtered_scores
+    })
+    return results
+
+
 def compute_disparity(left_bbox, right_bbox):
     """Вычисляет disparity между bbox в левой и правой камерах"""
     center_L_x = (left_bbox[1] + left_bbox[3]) // 2
@@ -66,11 +86,10 @@ def match_boxes(left_results, right_results):
 
 def draw_boxes(image, results):
     """Отрисовка bbox"""
-    for (y1, x1, y2, x2), class_id, score in zip(results['absolute_boxes'], results['detection_classes'], results['detection_scores']):
-        if class_id == 0:
-            label = f"Person ({score:.2f})"
-            cv2.rectangle(image, (x1, y1), (x2, y2), (0, 255, 0), 2)
-            cv2.putText(image, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+    for (y1, x1, y2, x2), score in zip(results['absolute_boxes'], results['detection_scores']):
+        label = f"Person ({score:.2f})"
+        cv2.rectangle(image, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        cv2.putText(image, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
     return image
 
 
@@ -119,7 +138,9 @@ try:
         frame_left, frame_right = cam_left.get_frame(), cam_right.get_frame()
         if frame_left is not None and frame_right is not None:
             detections = proc.process([frame_left, frame_right])
-            result_left, result_right = detections[0], detections[1]
+
+            # Фильтрация только class=0 (человек)
+            result_left, result_right = filter_people(detections[0]), filter_people(detections[1])
 
             matches = match_boxes(result_left, result_right)
             depth_results = compute_depth(result_left, result_right, matches)
