@@ -34,6 +34,20 @@ def undistort_and_rectify(frame, mtx, dist):
     return cv2.undistort(frame, mtx, dist, None, new_mtx)
 
 
+def compute_disparity_map(left_img, right_img):
+    """Рассчет карты глубины через disparity."""
+    gray_left = cv2.cvtColor(left_img, cv2.COLOR_BGR2GRAY)
+    gray_right = cv2.cvtColor(right_img, cv2.COLOR_BGR2GRAY)
+
+    stereo = cv2.StereoBM_create(numDisparities=64, blockSize=15)
+    disparity = stereo.compute(gray_left, gray_right).astype(np.float32)
+
+    disparity[disparity <= 0] = 1  # Избегаем деления на 0
+    depth_map = (FOCAL_LENGTH * BASELINE) / disparity  # Глубина по disparity
+
+    return depth_map
+
+
 def match_boxes(left_results, right_results):
     """Сопоставление bounding box'ов по центрам и горизонтали."""
     left_boxes = left_results["absolute_boxes"]
@@ -54,7 +68,7 @@ def match_boxes(left_results, right_results):
 
 
 def compute_depth(left_results, right_results, matches, depth_map):
-    """Вычисление глубины на основе disparity + depth map."""
+    """Вычисление глубины на основе disparity + медианный фильтр depth map."""
     global depth_history
     depths = {}
     left_boxes = left_results['absolute_boxes']
@@ -151,10 +165,10 @@ try:
             frame_left = undistort_and_rectify(frame_left, mtxL, distL)
             frame_right = undistort_and_rectify(frame_right, mtxR, distR)
 
+            depth_map = compute_disparity_map(frame_left, frame_right)  # Расчет карты глубины
+
             detections = proc.process([frame_left, frame_right])
             result_left, result_right = detections[0], detections[1]
-
-            depth_map = np.zeros_like(frame_left[:, :, 0])  # Заглушка, заменишь на реальную depth map
 
             matches = match_boxes(result_left, result_right)
             depth_results = compute_depth(result_left, result_right, matches, depth_map)
@@ -166,6 +180,7 @@ try:
             processed_right = draw_depth(processed_right, depth_results)
 
             combined = cv2.hconcat([processed_left, processed_right])
+            cv2.resizewindow("Stereo Depth", 1920, 1080)
             cv2.imshow("Stereo Depth", combined)
 
         if cv2.waitKey(1) & 0xFF == ord('q'):
