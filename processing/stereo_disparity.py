@@ -16,10 +16,9 @@ R, T = calib_data["R"], calib_data["T"]
 BASELINE = abs(T[0][0])  # Расстояние между камерами (мм)
 FOCAL_LENGTH = mtxL[0, 0]  # Фокусное расстояние (пиксели)
 
-# === 2. ФИЛЬТР ГЛУБИНЫ (для сглаживания) ===
+# === 2. ФИЛЬТР ДЛЯ СТАБИЛЬНОГО DEPTH ===
 depth_history = {}
 DEPTH_FILTER_SIZE = 5  # Размер скользящего окна
-
 
 # === 3. ФУНКЦИИ ===
 def compute_disparity(left_bbox, right_bbox):
@@ -31,25 +30,24 @@ def compute_disparity(left_bbox, right_bbox):
 
 
 def compute_depth(left_results, right_results, matches):
-    """Вычисление глубины с фильтрацией"""
+    """Вычисление стабильной глубины (1 значение на объект)"""
     global depth_history
-    depths = []
+    depths = {}
 
     for left_idx, right_idx in matches:
         left_box, right_box = left_results['absolute_boxes'][left_idx], right_results['absolute_boxes'][right_idx]
         disparity, obj_x, obj_y = compute_disparity(left_box, right_box)
         raw_depth = (FOCAL_LENGTH * BASELINE) / disparity  # Глубина в мм
 
-        # Фильтрация скачков
         obj_id = left_idx
         if obj_id not in depth_history:
             depth_history[obj_id] = deque(maxlen=DEPTH_FILTER_SIZE)
         depth_history[obj_id].append(raw_depth)
-        final_depth = np.median(depth_history[obj_id])
+        final_depth = np.median(depth_history[obj_id])  # Усредняем depth
 
-        depths.append((obj_x, obj_y, final_depth))  # (X, Y, Depth)
+        depths[obj_id] = (obj_x, obj_y, final_depth)  # (X, Y, Depth)
 
-    return depths
+    return list(depths.values())  # Выводим только 1 depth на объект
 
 
 def match_boxes(left_results, right_results):
@@ -67,9 +65,8 @@ def match_boxes(left_results, right_results):
 
 
 def draw_boxes(image, results):
-    """Отрисовка bbox и глубины"""
-    for (y1, x1, y2, x2), class_id, score in zip(results['absolute_boxes'], results['detection_classes'],
-                                                 results['detection_scores']):
+    """Отрисовка bbox"""
+    for (y1, x1, y2, x2), class_id, score in zip(results['absolute_boxes'], results['detection_classes'], results['detection_scores']):
         if class_id == 0:
             label = f"Person ({score:.2f})"
             cv2.rectangle(image, (x1, y1), (x2, y2), (0, 255, 0), 2)
@@ -78,7 +75,7 @@ def draw_boxes(image, results):
 
 
 def draw_depth(image, depth_results):
-    """Отрисовка глубины прямо на изображении"""
+    """Отрисовка глубины (1 значение на объект)"""
     for x, y, d in depth_results:
         cv2.putText(image, f"{d:.1f} mm", (x, y), cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 255, 255), 3)
     return image
@@ -128,7 +125,7 @@ try:
             depth_results = compute_depth(result_left, result_right, matches)
 
             processed_left = draw_boxes(frame_left, result_left)
-            processed_left = draw_depth(processed_left, depth_results)
+            processed_left = draw_depth(processed_left, depth_results)  # 1 depth на объект
 
             combined = cv2.hconcat([processed_left, frame_right])
             cv2.namedWindow("Stereo Depth", cv2.WINDOW_NORMAL)
