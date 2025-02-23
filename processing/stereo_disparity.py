@@ -116,38 +116,13 @@ def draw_depth(image, depth_results):
     return image
 
 
-def choose_model():
-    """Выбор модели перед запуском."""
-    model_files = [f for f in os.listdir(models_dir) if f.endswith(".hef")]
-
-    print("\n📌 Доступные модели:")
-    for i, model in enumerate(model_files):
-        print(f"  {i + 1}. {model}")
-
-    while True:
-        try:
-            choice = int(input("\n👉 Выберите номер модели: ")) - 1
-            if 0 <= choice < len(model_files):
-                return os.path.join(models_dir, model_files[choice])
-            else:
-                print("❌ Неверный ввод. Попробуйте снова.")
-        except ValueError:
-            print("❌ Введите число!")
-
-
 # === 3. ЗАПУСК КАМЕР И ДЕТЕКЦИИ ===
-model_path = choose_model()
-print(f"🚀 Запуск с моделью: {model_path}")
-
-inf = HailoInference(model_path)
-proc = Processor(inf, conf=0.5)
+print("🚀 Запуск стереопотока с расчетом глубины. Нажмите 'q' для выхода.")
 
 cam_left = CameraDriver(camera_id=0)
 cam_right = CameraDriver(camera_id=1)
 cam_left.start_camera()
 cam_right.start_camera()
-
-print("🎥 Запуск стереопотока с расчетом глубины. Нажмите 'q' для выхода.")
 
 try:
     while True:
@@ -161,18 +136,19 @@ try:
             detections = proc.process([frame_left, frame_right])
             result_left, result_right = detections[0], detections[1]
 
-            matches = match_boxes(result_left, result_right)
-            depth_results = compute_depth(result_left, result_right, matches)
+            # Получаем карту глубины (нужно заменить на свою реализацию)
+            depth_map = np.zeros_like(frame_left[:, :, 0])  # Заглушка, сюда подставить реальный depth_map
 
-            processed_left = draw_boxes(frame_left, result_left, color=(0, 255, 0))
-            processed_right = draw_boxes(frame_right, result_right, color=(255, 0, 0))
+            matches = match_boxes(result_left, result_right)
+            depth_results = compute_depth(result_left, result_right, matches, depth_map)
+
+            processed_left = draw_boxes(frame_left, result_left)
+            processed_right = draw_boxes(frame_right, result_right)
 
             processed_left = draw_depth(processed_left, depth_results)
             processed_right = draw_depth(processed_right, depth_results)
 
             combined = cv2.hconcat([processed_left, processed_right])
-            cv2.namedWindow("Stereo Depth", cv2.WINDOW_NORMAL)
-            cv2.resizeWindow("Stereo Depth", 1920, 1080)
             cv2.imshow("Stereo Depth", combined)
 
         if cv2.waitKey(1) & 0xFF == ord('q'):
