@@ -8,6 +8,8 @@ import time
 
 class InferenceImage:
     def __init__(self, image: np.ndarray):
+        self.img_w = None
+        self.img_h = None
         self.image = image
         self.model_w = None
         self.model_h = None
@@ -24,6 +26,7 @@ class InferenceImage:
 
     def preprocess(self):
         img_h, img_w, _ = self.image.shape
+
         self.scale = min(self.model_w / img_w, self.model_h / img_h)
         self.new_img_w, self.new_img_h = int(img_w * self.scale), int(img_h * self.scale)
         image_resized = cv2.resize(self.image, (self.new_img_w, self.new_img_h))
@@ -33,6 +36,7 @@ class InferenceImage:
         self.pasted_w = (self.model_w - self.new_img_w) // 2
         self.pasted_h = (self.model_h - self.new_img_h) // 2
         self.padded_image[self.pasted_h:self.pasted_h + self.new_img_h, self.pasted_w:self.pasted_w+self.new_img_w, :] = image_resized
+        self.img_h, self.img_w = img_h, img_w
         return self.padded_image
 
     def preprocessed(self):
@@ -80,7 +84,7 @@ class InferenceImage:
                    self.pasted_w:self.pasted_w + self.new_img_w]
 
             # Восстанавливаем исходный размер изображения
-            restored_mask = cv2.resize(mask, (self.original_w, self.original_h), interpolation=cv2.INTER_NEAREST)
+            restored_mask = cv2.resize(mask, (self.img_w, self.img_h), interpolation=cv2.INTER_NEAREST)
             restored_masks.append(restored_mask)
 
         detection_results.update({'absolute_masks': np.array(restored_masks, dtype=np.uint8)})
@@ -310,30 +314,13 @@ class Processor:
             inf_img.set_model_input_size(width, height)
             preprocessed_images.append(inf_img.preprocess())
             inf_images.append(inf_img)
-        raw_detect_data = self._inference.run(np.asarray(preprocessed_images))
+        raw_detect_data = self._inference.run(np.stack(preprocessed_images))
         final_result = []
         for det, im in zip(raw_detect_data, inf_images):
             result = HailoInference.extract_segmentations(det, self._conf)
             final_result.append(im.postprocess_mask(result))
 
-            # Получаем восстановленные маски
-        for result in final_result:
-            absolute_masks = result.get('absolute_masks')
-            if absolute_masks is None:
-                continue  # Если маски нет, пропускаем
 
-            for mask in absolute_masks:
-                mask_overlay = np.zeros_like(im.image)
-                mask_overlay[:, :, 2] = mask * 255  # Синий канал
-
-                blended = cv2.addWeighted(im.image, 0.7, mask_overlay, 0.3, 0)
-                cv2.imshow("Segmentation Mask", blended)
-                cv2.waitKey(0)
-
-            # drawed = im.draw_boxes(result)
-            # cv2.namedWindow("Camera", cv2.WINDOW_NORMAL)  # Делаем окно изменяемым
-            # cv2.resizeWindow("Camera", 960, 540)
-            # cv2.imshow("Camera", drawed)
         elapsed_time = time.time() - start_time  # Вычисляем общее время выполнения
         print(f"[INFO] Total elapsed time: {elapsed_time:.3f} seconds")
         return final_result
