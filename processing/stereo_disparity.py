@@ -140,7 +140,7 @@ print(f"🚀 Запуск с моделью: {model_path}")
 inf = HailoInference(model_path)
 proc = Processor(inf, conf=0.5)
 
-stereo = StereoCameraSystem(camera_id=0)
+stereo = StereoCameraSystem()
 stereo.start()
 
 print("🎥 Запуск стереопотока. Нажмите 'q' для выхода.")
