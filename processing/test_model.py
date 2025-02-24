@@ -59,7 +59,7 @@ try:
                 left_mask_overlay[:, :, 2] = mask * 255  # Добавляем в синий канал
 
             # Объединяем оригинальное правое изображение с наложенной маской
-            left_blended = cv2.addWeighted(frame_left, 0.7, left_masks, 0.3, 0)
+            left_blended = cv2.addWeighted(frame_left, 0.7, left_mask_overlay, 0.3, 0)
 
             # Конкатенируем левую и правую картинки (левая слева, правая справа)
             # combined = np.hstack((left_blended, right_blended))
