@@ -152,9 +152,16 @@ class CameraDriver:
             self._apply_pending_settings()
 
     def _apply_pending_settings(self):
-        """Применяет обновленные настройки камеры"""
+        """Применяет обновленные настройки камеры, избегая лишних вызовов."""
         with self.exposure_lock:
-            self.picam.set_controls({
+            controls = {}
+
+            # Проверяем, поддерживается ли установка фокуса (LensPosition)
+            if "LensPosition" in self.picam.camera_controls and self.lens_position is not None:
+                controls["LensPosition"] = self.lens_position
+
+            # Обновляем остальные параметры
+            controls.update({
                 "AeEnable": 0,
                 "ExposureTime": int(self.exposure_time),
                 "AnalogueGain": self.analogue_gain,
@@ -162,9 +169,12 @@ class CameraDriver:
                 "Contrast": self.contrast,
                 "Saturation": self.saturation,
                 "Sharpness": self.sharpness,
-                "LensPosition": self.lens_position if self.lens_position else 0
             })
-        logging.info(f"[Камера {self.camera_id}] Обновлены параметры.")
+
+            # Применяем все настройки одним вызовом (ускоряет работу)
+            self.picam.set_controls(controls)
+
+        logging.info(f"[Камера {self.camera_id}] Обновлены параметры: {controls}")
 
     def apply_settings(self, master):
         """Копирует настройки ведущей камеры"""
