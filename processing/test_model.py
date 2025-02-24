@@ -6,6 +6,7 @@ from scipy.optimize import linear_sum_assignment
 from cam.camera_driver import StereoCameraSystem
 from processing.hailo_detection import HailoInference, Processor
 
+
 def filter_people(results):
     """
     Фильтрация детекций для выбранного класса.
@@ -28,8 +29,6 @@ def filter_people(results):
         'detection_scores': filtered_scores
     })
     return results
-
-
 
 
 def choose_model():
@@ -71,18 +70,10 @@ try:
     while True:
         frame_left, frame_right = stereo.get_synchronized_frames()
         if frame_left is not None and frame_right is not None:
-
             # Выполняем детекцию объектов на обоих изображениях
             detections = proc.process([frame_left, frame_right])
-            result_left = filter_people(detections[0])
-            result_right = filter_people(detections[1])
 
-            if not result_left['absolute_boxes']:
-                print("Лог: В левом изображении не найдено объектов машины.")
-            if not result_right['absolute_boxes']:
-                print("Лог: В правом изображении не найдено объектов машины.")
-
-            print(f'{result_left=}')
+            print(f'{detections[0]=}')
             break
 
         if cv2.waitKey(1) & 0xFF == ord('q'):
