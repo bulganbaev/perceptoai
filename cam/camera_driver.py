@@ -9,7 +9,7 @@ from picamera2 import Picamera2
 
 # Настройки логирования
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.WARNING,
     format="%(asctime)s [%(levelname)s] %(message)s",
     handlers=[
         logging.FileHandler("stereo_camera.log"),
@@ -124,7 +124,8 @@ class CameraDriver:
                 self.analogue_gain = max(self.analogue_gain * 0.8, 1)
 
             self.update_needed.set()
-
+        logging.warning(f'{avg_brightness=}')
+        logging.warning(f'{self.exposure_time=}')
         logging.info(
             f"[Камера {self.camera_id}] Коррекция экспозиции: "
             f"ExposureTime={self.exposure_time}, "
