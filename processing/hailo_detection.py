@@ -62,6 +62,30 @@ class InferenceImage:
         detection_results.update({'absolute_boxes': absolute_boxes})
         return detection_results
 
+    def postprocess_mask(self, detection_results: dict):
+        """
+        Восстанавливает маску к оригинальному размеру изображения.
+        """
+        masks = detection_results.get('detection_masks')  # Получаем маски (массив [N, H, W])
+        if masks is None:
+            return detection_results  # Если масок нет, просто возвращаем результаты
+
+        restored_masks = []
+        for mask in masks:
+            # Масштабируем обратно к размеру модели
+            mask = cv2.resize(mask, (self.model_w, self.model_h), interpolation=cv2.INTER_NEAREST)
+
+            # Убираем паддинг
+            mask = mask[self.pasted_h:self.pasted_h + self.new_img_h,
+                   self.pasted_w:self.pasted_w + self.new_img_w]
+
+            # Восстанавливаем исходный размер изображения
+            restored_mask = cv2.resize(mask, (self.original_w, self.original_h), interpolation=cv2.INTER_NEAREST)
+            restored_masks.append(restored_mask)
+
+        detection_results.update({'absolute_masks': np.array(restored_masks, dtype=np.uint8)})
+        return detection_results
+
     def draw_boxes(self, results: dict):
         boxes = results.get('absolute_boxes', [])
         scores = results.get('detection_scores', [])
@@ -207,11 +231,6 @@ class HailoInference:
                 bounding_boxes.append([x_min, y_min, x_max, y_max])
                 scores.append(np.max(class_map))  # Максимальная уверенность в сегменте
                 classes.append(class_id)
-        print(f'{masks=}')
-        print(f'{bounding_boxes=}')
-        print(f'{scores=}')
-        print(f'{classes=}')
-        print(f'{len(masks)=}')
         return {
             'segmentation_masks': masks,  # Бинарные маски сегментов
             'bounding_boxes': bounding_boxes,  # Ограничивающие рамки [x_min, y_min, x_max, y_max]
@@ -295,7 +314,7 @@ class Processor:
         final_result = []
         for det, im in zip(raw_detect_data, inf_images):
             result = HailoInference.extract_segmentations(det, self._conf)
-            final_result.append(im.postprocess(result))
+            final_result.append(im.postprocess_mask(result))
 
             # drawed = im.draw_boxes(result)
             # cv2.namedWindow("Camera", cv2.WINDOW_NORMAL)  # Делаем окно изменяемым
