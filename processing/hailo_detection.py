@@ -114,7 +114,7 @@ class HailoInference:
         Returns:
             tuple: Input and output stream parameters.
         """
-        input_format_type = self.hef.get_input_vstream_infos()[0].format.type
+        input_format_type = self.hef.get_input_vstream_infos()[-1].format.type
         input_vstreams_params = InputVStreamParams.make_from_network_group(self.network_group, format_type=input_format_type)
         output_vstreams_params = OutputVStreamParams.make_from_network_group(self.network_group, format_type=getattr(FormatType, output_type))
         return input_vstreams_params, output_vstreams_params

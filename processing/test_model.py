@@ -4,7 +4,7 @@ import numpy as np
 from collections import deque
 from scipy.optimize import linear_sum_assignment
 from cam.camera_driver import StereoCameraSystem
-from processing.hailo_segmentation import HailoSegmentation, ProcessorSegmentation
+from processing.hailo_detection import HailoInference, Processor
 
 
 def filter_people(results):
@@ -56,8 +56,8 @@ def choose_model():
 
 # === 4. ЗАПУСК КАМЕР И ДЕТЕКЦИИ ===
 model_path = choose_model()
-inf = HailoSegmentation(model_path)
-proc = ProcessorSegmentation(inference=inf)
+inf = HailoInference(model_path)
+proc = Processor(inf, conf=0.5)
 stereo = StereoCameraSystem()
 stereo.start()
 
@@ -73,8 +73,8 @@ try:
             # Выполняем детекцию объектов на обоих изображениях
             detections = proc.process([frame_left, frame_right])
 
-            cv2.imwrite("segmentation_left.png", detections[0])
-
+            print(f'{detections[0]=}')
+            break
 
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
