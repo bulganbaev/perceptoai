@@ -170,7 +170,6 @@ try:
 except KeyboardInterrupt:
     print("⏹️ Остановка потока...")
 
-cam_left.stop_camera()
-cam_right.stop_camera()
+stereo.stop()
 cv2.destroyAllWindows()
 print("✅ Поток завершён.")
