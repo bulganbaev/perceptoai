@@ -73,7 +73,6 @@ try:
             # Выполняем детекцию объектов на обоих изображениях
             detections = proc.process([frame_left, frame_right])
 
-            print(f'{detections[0]=}')
             break
 
         if cv2.waitKey(1) & 0xFF == ord('q'):

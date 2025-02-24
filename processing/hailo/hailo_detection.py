@@ -150,7 +150,6 @@ class HailoInference:
         """
         boxes, scores, classes = [], [], []
         num_detections = 0
-        print(f'{input_data=}')
 
         for i, detection in enumerate(input_data):
             if len(detection) == 0:
