@@ -171,7 +171,7 @@ class HailoInference:
             'num_detections': num_detections
         }
 
-    def extract_segmentations(input_data: np.ndarray, conf_threshold: float = 0.5) -> Dict[str, Any]:
+    def extract_segmentations(input_data: np.ndarray, conf_threshold: float = 0.5) -> dict[str, any]:
         """
         Extract segmentations from YOLOv8 segmentation output.
 
