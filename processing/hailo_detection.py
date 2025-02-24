@@ -318,6 +318,7 @@ class Processor:
         raw_detect_data = self._inference.run(np.stack(preprocessed_images))
         final_result = []
         for det, im in zip(raw_detect_data, inf_images):
+            print(f'{det=}' )
             result = HailoInference.extract_segmentations(det, self._conf)
             final_result.append(im.postprocess_mask(result))
 
