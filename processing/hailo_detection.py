@@ -91,7 +91,6 @@ class InferenceImage:
             restored_masks.append(restored_mask)
 
         detection_results.update({'absolute_masks': np.array(restored_masks, dtype=np.uint8)})
-        print(f"[DEBUG] Количество масок: {len(restored_masks)}")
         return detection_results
 
     def draw_boxes(self, results: dict):
@@ -242,7 +241,6 @@ class HailoInference:
                 bounding_boxes.append([x_min, y_min, x_max, y_max])
                 scores.append(np.max(class_map))  # Максимальная уверенность в сегменте
                 classes.append(class_id)
-        print(f"[DEBUG] Найдено {len(masks)} масок, классы: {classes}, оценки: {scores}")
 
         return {
             'segmentation_masks': masks,  # Бинарные маски сегментов
