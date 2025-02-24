@@ -319,8 +319,8 @@ class Processor:
         final_result = []
         for det, im in zip(raw_detect_data, inf_images):
             result = HailoInference.extract_segmentations(det, self._conf)
-            print(f'{result=}')
             final_result.append(im.postprocess_mask(result))
+            print(f'{final_result=}')
 
 
         elapsed_time = time.time() - start_time  # Вычисляем общее время выполнения
