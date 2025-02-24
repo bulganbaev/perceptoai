@@ -97,6 +97,24 @@ def match_boxes(left_results, right_results):
     return [(l, r) for l, r in zip(left_indices, right_indices)]
 
 
+
+def draw_boxes(image, results):
+    """Отрисовка bbox"""
+    for (y1, x1, y2, x2), score in zip(results['absolute_boxes'], results['detection_scores']):
+        label = f"Car ({score:.2f})"
+        cv2.rectangle(image, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        cv2.putText(image, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+    return image
+
+
+def draw_depth(image, depth_results):
+    """Отрисовка глубины (1 значение + диапазон)"""
+    for x, y, d, d_min, d_max in depth_results:
+        text = f"{d:.1f}mm ({d_min:.1f}-{d_max:.1f}mm)"
+        cv2.putText(image, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (255, 255, 255), 3)
+    return image
+
+
 def choose_model():
     """Выбор модели перед запуском"""
     models_dir = "data/models"
