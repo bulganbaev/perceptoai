@@ -68,7 +68,7 @@ class InferenceImage:
 
     def postprocess_mask(self, detection_results: dict):
         """
-        Восстанавливает маску к оригинальному размеру изображения.
+        Восстанавливает маску к оригинальному размеру изображения с учетом перепутанных X и Y в YOLO.
         """
         masks = detection_results.get('segmentation_masks')  # Получаем маски (массив [N, H, W])
         if masks is None:
@@ -78,6 +78,9 @@ class InferenceImage:
         for mask in masks:
             # Масштабируем обратно к размеру модели
             mask = cv2.resize(mask, (self.model_w, self.model_h), interpolation=cv2.INTER_NEAREST)
+
+            # ❗ Обмен X и Y перед обрезкой паддинга
+            mask = mask.T
 
             # Убираем паддинг
             mask = mask[self.pasted_h:self.pasted_h + self.new_img_h,
