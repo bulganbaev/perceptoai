@@ -5,7 +5,6 @@ import numpy as np
 import time
 
 
-
 class InferenceImage:
     def __init__(self, image: np.ndarray):
         self.img_w = None
@@ -35,7 +34,8 @@ class InferenceImage:
         self.padded_image = np.zeros((self.model_w, self.model_h, 3), dtype=np.uint8)
         self.pasted_w = (self.model_w - self.new_img_w) // 2
         self.pasted_h = (self.model_h - self.new_img_h) // 2
-        self.padded_image[self.pasted_h:self.pasted_h + self.new_img_h, self.pasted_w:self.pasted_w+self.new_img_w, :] = image_resized
+        self.padded_image[self.pasted_h:self.pasted_h + self.new_img_h, self.pasted_w:self.pasted_w + self.new_img_w,
+        :] = image_resized
         self.img_h, self.img_w = img_h, img_w
         return self.padded_image
 
@@ -86,8 +86,6 @@ class InferenceImage:
             # Восстанавливаем исходный размер изображения
             restored_mask = cv2.resize(mask, (self.img_w, self.img_h), interpolation=cv2.INTER_NEAREST)
             restored_masks.append(restored_mask)
-            print(f"[DEBUG] Количество масок: {len(restored_masks)}")
-
 
         detection_results.update({'absolute_masks': np.array(restored_masks, dtype=np.uint8)})
         return detection_results
@@ -109,7 +107,7 @@ class InferenceImage:
 
 
 class HailoInference:
-    def __init__(self, hef_path,  output_type='FLOAT32'):
+    def __init__(self, hef_path, output_type='FLOAT32'):
         """
         Initialize the HailoInference class with the provided HEF model file path.
 
@@ -145,8 +143,11 @@ class HailoInference:
             tuple: Input and output stream parameters.
         """
         input_format_type = self.hef.get_input_vstream_infos()[-1].format.type
-        input_vstreams_params = InputVStreamParams.make_from_network_group(self.network_group, format_type=input_format_type)
-        output_vstreams_params = OutputVStreamParams.make_from_network_group(self.network_group, format_type=getattr(FormatType, output_type))
+        input_vstreams_params = InputVStreamParams.make_from_network_group(self.network_group,
+                                                                           format_type=input_format_type)
+        output_vstreams_params = OutputVStreamParams.make_from_network_group(self.network_group,
+                                                                             format_type=getattr(FormatType,
+                                                                                                 output_type))
         return input_vstreams_params, output_vstreams_params
 
     def _get_and_print_vstream_info(self):
@@ -237,6 +238,8 @@ class HailoInference:
                 bounding_boxes.append([x_min, y_min, x_max, y_max])
                 scores.append(np.max(class_map))  # Максимальная уверенность в сегменте
                 classes.append(class_id)
+        print(f"[DEBUG] Найдено {len(masks)} масок, классы: {classes}, оценки: {scores}")
+
         return {
             'segmentation_masks': masks,  # Бинарные маски сегментов
             'bounding_boxes': bounding_boxes,  # Ограничивающие рамки [x_min, y_min, x_max, y_max]
@@ -244,6 +247,7 @@ class HailoInference:
             'detection_classes': classes,  # Индексы классов
             'num_segmentations': len(masks)  # Количество найденных объектов
         }
+
     def get_input_shape(self):
         """
         Get the shape of the model's input layer.
@@ -265,7 +269,8 @@ class HailoInference:
         """
         input_dict = self._prepare_input_data(input_data)
 
-        with InferVStreams(self.network_group, self.input_vstreams_params, self.output_vstreams_params) as infer_pipeline:
+        with InferVStreams(self.network_group, self.input_vstreams_params,
+                           self.output_vstreams_params) as infer_pipeline:
             with self.network_group.activate(self.network_group_params):
                 output = infer_pipeline.infer(input_dict)[self.output_vstream_info[0].name]
 
@@ -321,7 +326,6 @@ class Processor:
         for det, im in zip(raw_detect_data, inf_images):
             result = HailoInference.extract_segmentations(det, self._conf)
             final_result.append(im.postprocess_mask(result))
-
 
         elapsed_time = time.time() - start_time  # Вычисляем общее время выполнения
         print(f"[INFO] Total elapsed time: {elapsed_time:.3f} seconds")
