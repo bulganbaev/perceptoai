@@ -88,6 +88,7 @@ class InferenceImage:
             restored_masks.append(restored_mask)
 
         detection_results.update({'absolute_masks': np.array(restored_masks, dtype=np.uint8)})
+        print(f"[DEBUG] Количество масок: {len(restored_masks)}")
         return detection_results
 
     def draw_boxes(self, results: dict):
