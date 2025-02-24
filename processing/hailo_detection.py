@@ -316,6 +316,22 @@ class Processor:
             result = HailoInference.extract_segmentations(det, self._conf)
             final_result.append(im.postprocess_mask(result))
 
+            # Получаем восстановленные маски
+            absolute_masks = final_result.get('absolute_masks')
+
+            # Накладываем маски на изображение
+            for mask in absolute_masks:
+                # Создаем трехканальную маску (например, синий цвет)
+                mask_overlay = np.zeros_like(im.image)
+                mask_overlay[:, :, 2] = mask * 255  # Синий канал
+
+                # Объединяем с оригинальным изображением
+                blended = cv2.addWeighted(im.image, 0.7, mask_overlay, 0.3, 0)
+
+                # Отображаем результат
+                cv2.imshow("Segmentation Mask", blended)
+                cv2.waitKey(0)
+
             # drawed = im.draw_boxes(result)
             # cv2.namedWindow("Camera", cv2.WINDOW_NORMAL)  # Делаем окно изменяемым
             # cv2.resizeWindow("Camera", 960, 540)
