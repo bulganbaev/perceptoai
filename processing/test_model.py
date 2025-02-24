@@ -57,7 +57,7 @@ def choose_model():
 # === 4. ЗАПУСК КАМЕР И ДЕТЕКЦИИ ===
 model_path = choose_model()
 inf = HailoSegmentation(model_path)
-proc = ProcessorSegmentation()
+proc = ProcessorSegmentation(inference=inf)
 stereo = StereoCameraSystem()
 stereo.start()
 
