@@ -59,13 +59,13 @@ try:
                 right_mask_overlay[:, :, 2] = mask * 255  # Добавляем в синий канал
 
             # Объединяем оригинальное правое изображение с наложенной маской
-            right_blended = cv2.addWeighted(frame_right, 0.7, right_mask_overlay, 0.3, 0)
+            left_blended = cv2.addWeighted(frame_left, 0.7, left_masks, 0.3, 0)
 
             # Конкатенируем левую и правую картинки (левая слева, правая справа)
-            combined = np.hstack((frame_left, right_blended))
+            # combined = np.hstack((left_blended, right_blended))
 
             # Приводим к Full HD (1920x1080)
-            combined_resized = cv2.resize(combined, (1920, 1080))
+            combined_resized = cv2.resize(left_blended, (1920, 1080))
 
             # Показываем результат
             cv2.imshow("Stereo Segmentation", combined_resized)
