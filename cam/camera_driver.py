@@ -4,12 +4,23 @@ import numpy as np
 import threading
 import atexit
 import time
+import logging
 from picamera2 import Picamera2
+
+# Настройки логирования
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[
+        logging.FileHandler("stereo_camera.log"),  # Лог в файл
+        logging.StreamHandler()  # Лог в консоль
+    ]
+)
 
 
 class CameraDriver:
     """
-    Драйвер для камеры OV5647 с полной синхронизацией параметров.
+    Драйвер для камеры OV5647 с полной синхронизацией параметров и логированием.
     """
 
     def __init__(self, camera_id=0, width=1920, height=1080, autofocus=True):
@@ -43,9 +54,10 @@ class CameraDriver:
                 controls=control_params
             )
             self.picam.configure(config)
+            logging.info(f"Камера {self.camera_id} успешно инициализирована.")
 
         except Exception as e:
-            print(f"Ошибка при инициализации камеры {camera_id}: {e}")
+            logging.error(f"Ошибка при инициализации камеры {camera_id}: {e}")
             self.picam = None
 
     def start_camera(self):
@@ -54,6 +66,7 @@ class CameraDriver:
             return
         self.running = True
         threading.Thread(target=self._capture_loop, daemon=True).start()
+        logging.info(f"Камера {self.camera_id} запущена.")
 
     def _capture_loop(self):
         """Основной цикл захвата изображений"""
@@ -73,7 +86,7 @@ class CameraDriver:
                     self.last_adjust_time = time.time()
 
         except Exception as e:
-            print(f"Ошибка в потоке камеры {self.camera_id}: {e}")
+            logging.error(f"Ошибка в потоке камеры {self.camera_id}: {e}")
         finally:
             self.picam.stop()
 
@@ -110,6 +123,9 @@ class CameraDriver:
             "Sharpness": self.sharpness,
         })
 
+        logging.info(f"[Камера {self.camera_id}] Автоэкспозиция: {self.exposure_time}, "
+                     f"Усиление: {self.analogue_gain}, Баланс белого: {self.colour_gains}")
+
     def apply_settings(self, master):
         """Применяет настройки ведущей камеры"""
         self.picam.set_controls({
@@ -122,6 +138,8 @@ class CameraDriver:
             "Sharpness": master.sharpness,
         })
 
+        logging.info(f"[Камера {self.camera_id}] Настройки синхронизированы с ведущей камерой.")
+
     def get_frame(self):
         """Ждет, пока будет доступен новый кадр, и возвращает его"""
         with self.frame_ready:
@@ -133,10 +151,11 @@ class CameraDriver:
         self.running = False
         if self.picam:
             self.picam.close()
+        logging.info(f"Камера {self.camera_id} остановлена.")
 
 
 class StereoCameraSystem:
-    """Система стереокамер с полной синхронизацией параметров."""
+    """Система стереокамер с полной синхронизацией параметров и логированием."""
 
     def __init__(self, camera0_id=0, camera1_id=1):
         self.cam0 = CameraDriver(camera_id=camera0_id, autofocus=True)
@@ -145,10 +164,13 @@ class StereoCameraSystem:
         self.cam0.auto_adjust = True  # Только первая камера регулирует параметры
         self.cam1.auto_adjust = False
 
+        logging.info("Система стереокамер инициализирована.")
+
     def start(self):
         """Запускает обе камеры"""
         self.cam0.start_camera()
         self.cam1.start_camera()
+        logging.info("Обе камеры запущены.")
 
     def get_synchronized_frames(self):
         """Ожидает и возвращает синхронизированные кадры"""
@@ -160,3 +182,33 @@ class StereoCameraSystem:
         """Останавливает обе камеры"""
         self.cam0.stop_camera()
         self.cam1.stop_camera()
+        logging.info("Система стереокамер остановлена.")
+
+
+if __name__ == "__main__":
+    # Инициализация системы стереокамер
+    stereo_system = StereoCameraSystem()
+
+    # Регистрация выхода
+    atexit.register(stereo_system.stop)
+
+    # Запуск системы
+    stereo_system.start()
+
+    print("Нажмите 'q' для выхода.")
+
+    try:
+        while True:
+            frame0, frame1 = stereo_system.get_synchronized_frames()
+            if frame0 is not None and frame1 is not None:
+                combined = np.hstack((frame0, frame1))
+                cv2.imshow("Stereo Camera", combined)
+
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+
+    except KeyboardInterrupt:
+        logging.info("Выход по Ctrl+C")
+    finally:
+        stereo_system.stop()
+        cv2.destroyAllWindows()
