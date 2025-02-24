@@ -1,25 +1,22 @@
 import cv2
 import os
 import time
-from camera_driver import CameraDriver
+from camera_driver import StereoCameraSystem
 
 # Создаем папки, если их нет
 os.makedirs("data/images/left", exist_ok=True)
 os.makedirs("data/images/right", exist_ok=True)
 
 # Запускаем две камеры
-cam0 = CameraDriver(camera_id=0)
-cam1 = CameraDriver(camera_id=1)
-cam0.start_camera()
-cam1.start_camera()
+stereoCam = StereoCameraSystem()
+stereoCam.start()
 
 image_count = 0
 
 print("📸 Нажмите 's' для съемки, 'q' для выхода")
 try:
     while True:
-        frame0 = cam0.get_frame()
-        frame1 = cam1.get_frame()
+        frame0, frame1 = stereoCam.get_synchronized_frames()
 
         if frame0 is not None and frame1 is not None:
             combined = cv2.hconcat([frame0, frame1])
@@ -47,7 +44,6 @@ except KeyboardInterrupt:
     pass
 
 # Останавливаем камеры
-cam0.stop_camera()
-cam1.stop_camera()
+stereoCam.stop()
 cv2.destroyAllWindows()
 print("📁 Все снимки сохранены в 'images/left' и 'images/right'")
