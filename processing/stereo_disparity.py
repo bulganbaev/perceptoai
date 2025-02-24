@@ -156,6 +156,8 @@ try:
             processed_left = draw_depth(processed_left, depth_results)
             combined = cv2.hconcat([processed_left, frame_right])
 
+            cv2.namedWindow("Stereo Depth", cv2.WINDOW_NORMAL)
+            cv2.resizeWindow("Stereo Depth", 1920, 1080)
             cv2.imshow("Stereo Depth", combined)
 
         if cv2.waitKey(1) & 0xFF == ord('q'):
