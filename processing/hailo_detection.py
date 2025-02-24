@@ -139,29 +139,31 @@ class HailoInference:
     @staticmethod
     def extract_detections(input_data, conf_threshold: float = 0.5):
         """
-        Extract detections from the input data.
+        Извлекает детекции из выходных данных модели YOLO.
 
         Args:
-            input_data (list): Raw detections from the model.
-            threshold (float): Score threshold for filtering detections.
+            input_data (list): Сырые выходные данные модели.
+            conf_threshold (float): Порог уверенности для фильтрации детекций.
 
         Returns:
-            dict: Filtered detection results.
+            dict: Отфильтрованные результаты детекции.
         """
         boxes, scores, classes = [], [], []
         num_detections = 0
 
-        for i, detection in enumerate(input_data):
+        for detection in input_data:
             if len(detection) == 0:
                 continue
 
             for det in detection:
-                bbox, score = det[:4], det[4]
+                bbox = det[:4]  # Первые 4 значения - это координаты [x1, y1, x2, y2]
+                score = det[4]  # Пятый элемент - это уверенность
+                class_id = int(det[5]) if len(det) > 5 else 0  # Шестой элемент - ID класса (если есть)
 
                 if score >= conf_threshold:
                     boxes.append(bbox)
                     scores.append(score)
-                    classes.append(i)
+                    classes.append(class_id)
                     num_detections += 1
 
         return {
