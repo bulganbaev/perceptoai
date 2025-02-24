@@ -3,7 +3,7 @@ import os
 import numpy as np
 from collections import deque
 from scipy.optimize import linear_sum_assignment
-from cam.camera_driver import CameraDriver
+from cam.camera_driver import StereoCameraSystem
 from processing.hailo_detection import HailoInference, Processor
 
 # === 1. ЗАГРУЗКА КАЛИБРОВКИ ===
@@ -140,14 +140,14 @@ print(f"🚀 Запуск с моделью: {model_path}")
 inf = HailoInference(model_path)
 proc = Processor(inf, conf=0.5)
 
-cam_left, cam_right = CameraDriver(camera_id=0), CameraDriver(camera_id=1)
-cam_left.start_camera(), cam_right.start_camera()
+stereo = StereoCameraSystem(camera_id=0)
+stereo.start()
 
 print("🎥 Запуск стереопотока. Нажмите 'q' для выхода.")
 
 try:
     while True:
-        frame_left, frame_right = cam_left.get_frame(), cam_right.get_frame()
+        frame_left, frame_right = stereo.get_synchronized_frames()
         if frame_left is not None and frame_right is not None:
             detections = proc.process([frame_left, frame_right])
 
