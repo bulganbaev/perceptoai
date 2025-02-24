@@ -117,7 +117,7 @@ class CameraDriver:
                 self.lens_position = metadata["LensPosition"]
 
             if avg_brightness < 50:
-                self.exposure_time = min(self.exposure_time * 1.5, 30000)
+                self.exposure_time = min(self.exposure_time * 1.5, 600000)
                 self.analogue_gain = min(self.analogue_gain * 1.2, 4)
             elif avg_brightness > 180:
                 self.exposure_time = max(self.exposure_time * 0.7, 1000)
