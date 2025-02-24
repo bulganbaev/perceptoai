@@ -317,18 +317,16 @@ class Processor:
             final_result.append(im.postprocess_mask(result))
 
             # Получаем восстановленные маски
-            absolute_masks = final_result.get('absolute_masks')
+        for result in final_result:
+            absolute_masks = result.get('absolute_masks')
+            if absolute_masks is None:
+                continue  # Если маски нет, пропускаем
 
-            # Накладываем маски на изображение
             for mask in absolute_masks:
-                # Создаем трехканальную маску (например, синий цвет)
                 mask_overlay = np.zeros_like(im.image)
                 mask_overlay[:, :, 2] = mask * 255  # Синий канал
 
-                # Объединяем с оригинальным изображением
                 blended = cv2.addWeighted(im.image, 0.7, mask_overlay, 0.3, 0)
-
-                # Отображаем результат
                 cv2.imshow("Segmentation Mask", blended)
                 cv2.waitKey(0)
 
