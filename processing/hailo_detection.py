@@ -70,7 +70,7 @@ class InferenceImage:
         """
         Восстанавливает маску к оригинальному размеру изображения.
         """
-        masks = detection_results.get('detection_masks')  # Получаем маски (массив [N, H, W])
+        masks = detection_results.get('segmentation_masks')  # Получаем маски (массив [N, H, W])
         if masks is None:
             return detection_results  # Если масок нет, просто возвращаем результаты
 
