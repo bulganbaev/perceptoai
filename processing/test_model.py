@@ -95,9 +95,7 @@ try:
 
             # Отображение результатов
             for i, frame in enumerate([frame_left, frame_right]):
-                for box in segmentations[i]['absolute_boxes']:
-                    y1, x1, y2, x2 = box
-                    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+
 
                 for mask in segmentations[i].get('absolute_masks', []):
                     mask_overlay = np.zeros_like(frame)
