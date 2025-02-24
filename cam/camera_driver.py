@@ -172,6 +172,12 @@ class CameraDriver:
             self.sharpness = master.sharpness
         self.update_needed.set()
 
+    def get_frame(self):
+        """Ждет новый кадр и возвращает его"""
+        with self.frame_ready:
+            self.frame_ready.wait()
+            return self.frame
+
     def stop_camera(self):
         """Останавливает потоки"""
         self.running = False
