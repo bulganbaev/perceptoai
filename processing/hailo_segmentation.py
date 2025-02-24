@@ -38,6 +38,9 @@ class InferenceImageSegmentation:
 
     def postprocess(self, segmentation_output: np.ndarray):
         """ Восстановление размеров сегментированной маски под оригинальное изображение """
+        if segmentation_output is None or segmentation_output.size == 0:
+            raise ValueError("Ошибка: Пустая сегментированная карта. Проверьте входные данные модели.")
+
         # Обрезка паддинга и восстановление масштаба
         segmentation_output = segmentation_output[self.pasted_h:self.pasted_h + self.new_img_h,
                               self.pasted_w:self.pasted_w + self.new_img_w]
@@ -47,6 +50,9 @@ class InferenceImageSegmentation:
 
     def overlay_segmentation(self, segmentation_map: np.ndarray, alpha=0.5):
         """ Наложение сегментационной маски на оригинальное изображение """
+        if segmentation_map is None or segmentation_map.size == 0:
+            raise ValueError("Ошибка: Пустая сегментационная карта.")
+
         colors = np.random.randint(0, 255, size=(np.max(segmentation_map) + 1, 3), dtype=np.uint8)
         color_mask = colors[segmentation_map]
         blended = cv2.addWeighted(self.image, 1 - alpha, color_mask, alpha, 0)
@@ -101,18 +107,12 @@ class HailoSegmentation:
         return output
 
     def _prepare_input_data(self, input_data):
-        input_dict = {}
         if isinstance(input_data, dict):
             return input_data
         elif isinstance(input_data, (list, tuple)):
-            for layer_info in self.input_vstream_info:
-                input_dict[layer_info.name] = input_data
+            return {self.input_vstream_info[0].name: np.array(input_data)}
         else:
-            if input_data.ndim == 3:
-                input_data = np.expand_dims(input_data, axis=0)
-            input_dict[self.input_vstream_info[0].name] = input_data
-
-        return input_dict
+            return {self.input_vstream_info[0].name: np.expand_dims(input_data, axis=0)}
 
     def release_device(self):
         self.target.release()
