@@ -31,7 +31,7 @@ def filter_people(results):
     filtered_scores = []
     filtered_classes = []
     for i, class_id in enumerate(results['detection_classes']):
-        if class_id == 2:
+        if class_id == 0:
             filtered_boxes.append(results['absolute_boxes'][i])
             filtered_scores.append(results['detection_scores'][i])
             filtered_classes.append(class_id)
