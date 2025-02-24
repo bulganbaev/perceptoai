@@ -150,7 +150,6 @@ class HailoInference:
         """
         boxes, scores, classes = [], [], []
         num_detections = 0
-        print(f'{input_data=}')
 
         for i, detection in enumerate(input_data):
             if len(detection) == 0:
@@ -172,6 +171,50 @@ class HailoInference:
             'num_detections': num_detections
         }
 
+    def extract_segmentations(input_data: np.ndarray, conf_threshold: float = 0.5) -> Dict[str, Any]:
+        """
+        Extract segmentations from YOLOv8 segmentation output.
+
+        Args:
+            input_data (np.ndarray): YOLOv8 segmentation output, shape (160, 160, 32).
+            conf_threshold (float): Confidence threshold to filter segmentations.
+
+        Returns:
+            Dict[str, Any]: Extracted segmentations with bounding boxes, masks, and scores.
+        """
+        height, width, num_classes = input_data.shape  # (160, 160, 32)
+
+        masks, bounding_boxes, scores, classes = [], [], [], []
+
+        for class_id in range(num_classes):
+            class_map = input_data[:, :, class_id]  # Карта для текущего класса
+
+            # Применяем threshold (если нужно, можно заменить на sigmoid(class_map))
+            binary_mask = (class_map > conf_threshold).astype(np.uint8)
+
+            if np.sum(binary_mask) == 0:  # Пропустить пустые маски
+                continue
+
+            # Находим контуры объектов
+            contours, _ = cv2.findContours(binary_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+            for contour in contours:
+                # Получаем ограничивающий прямоугольник
+                x, y, w, h = cv2.boundingRect(contour)
+                x_min, y_min, x_max, y_max = x, y, x + w, y + h
+
+                masks.append(binary_mask)
+                bounding_boxes.append([x_min, y_min, x_max, y_max])
+                scores.append(np.max(class_map))  # Максимальная уверенность в сегменте
+                classes.append(class_id)
+
+        return {
+            'segmentation_masks': masks,  # Бинарные маски сегментов
+            'bounding_boxes': bounding_boxes,  # Ограничивающие рамки [x_min, y_min, x_max, y_max]
+            'detection_scores': scores,  # Максимальные confidence
+            'detection_classes': classes,  # Индексы классов
+            'num_segmentations': len(masks)  # Количество найденных объектов
+        }
     def get_input_shape(self):
         """
         Get the shape of the model's input layer.
@@ -247,7 +290,7 @@ class Processor:
         raw_detect_data = self._inference.run(np.asarray(preprocessed_images))
         final_result = []
         for det, im in zip(raw_detect_data, inf_images):
-            result = HailoInference.extract_detections(det, self._conf)
+            result = HailoInference.extract_segmentations(det, self._conf)
             final_result.append(im.postprocess(result))
 
             # drawed = im.draw_boxes(result)
