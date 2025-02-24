@@ -1,148 +1,95 @@
+#!/usr/bin/env python3
+"""
+Основной скрипт для запуска стереопотока с детекцией объектов с использованием HailoInference.
+"""
+
 import cv2
+import os
 import numpy as np
-import time
-from hailo_platform import (HEF, VDevice, HailoStreamInterface, InferVStreams, ConfigureParams,
-                            InputVStreamParams, OutputVStreamParams, FormatType)
+from cam.camera_driver import StereoCameraSystem
+from processing.hailo_detection import HailoInference, Processor
 
 
-class InferenceImageSegmentation:
-    def __init__(self, image: np.ndarray):
-        self.image = image
-        self.model_w = None
-        self.model_h = None
-        self.scale = None
-        self.new_img_w = None
-        self.new_img_h = None
-        self.pasted_w = None
-        self.pasted_h = None
-        self.padded_image = None
+def choose_model():
+    """
+    Позволяет выбрать модель для детекции из директории data/models.
 
-    def set_model_input_size(self, model_w, model_h):
-        self.model_w = model_w
-        self.model_h = model_h
+    Возвращает:
+        str: Полный путь к выбранной модели (.hef файл).
+    """
+    models_dir = "data/models"
+    model_files = [f for f in os.listdir(models_dir) if f.endswith(".hef")]
 
-    def preprocess(self):
-        """ Изменение размера входного изображения под размер модели """
-        img_h, img_w, _ = self.image.shape
-        self.scale = min(self.model_w / img_w, self.model_h / img_h)
-        self.new_img_w, self.new_img_h = int(img_w * self.scale), int(img_h * self.scale)
-        image_resized = cv2.resize(self.image, (self.new_img_w, self.new_img_h))
+    if not model_files:
+        print("Лог: Модели не найдены в директории", models_dir)
+        exit(1)
 
-        # Создание нового изображения с паддингом
-        self.padded_image = np.zeros((self.model_h, self.model_w, 3), dtype=np.uint8)
-        self.pasted_w = (self.model_w - self.new_img_w) // 2
-        self.pasted_h = (self.model_h - self.new_img_h) // 2
-        self.padded_image[self.pasted_h:self.pasted_h + self.new_img_h, self.pasted_w:self.pasted_w + self.new_img_w,
-        :] = image_resized
-        return self.padded_image
+    print("\n📌 Доступные модели:")
+    for i, model in enumerate(model_files):
+        print(f"  {i + 1}. {model}")
 
-    def postprocess(self, segmentation_output: np.ndarray):
-        """ Восстановление размеров сегментированной маски под оригинальное изображение """
-        if segmentation_output is None or segmentation_output.size == 0:
-            raise ValueError("Ошибка: Пустая сегментированная карта. Проверьте входные данные модели.")
-
-        # Обрезка паддинга и восстановление масштаба
-        segmentation_output = segmentation_output[self.pasted_h:self.pasted_h + self.new_img_h,
-                              self.pasted_w:self.pasted_w + self.new_img_w]
-        segmentation_output = cv2.resize(segmentation_output, (self.image.shape[1], self.image.shape[0]),
-                                         interpolation=cv2.INTER_NEAREST)
-        return segmentation_output
-
-    def overlay_segmentation(self, segmentation_map: np.ndarray, alpha=0.5):
-        """ Наложение сегментационной маски на оригинальное изображение """
-        if segmentation_map is None or segmentation_map.size == 0:
-            raise ValueError("Ошибка: Пустая сегментационная карта.")
-
-        colors = np.random.randint(0, 255, size=(np.max(segmentation_map) + 1, 3), dtype=np.uint8)
-        color_mask = colors[segmentation_map]
-        blended = cv2.addWeighted(self.image, 1 - alpha, color_mask, alpha, 0)
-        return blended
+    while True:
+        try:
+            choice = int(input("\n👉 Выберите номер модели: ")) - 1
+            if 0 <= choice < len(model_files):
+                return os.path.join(models_dir, model_files[choice])
+            else:
+                print("❌ Неверный ввод. Попробуйте снова.")
+        except ValueError:
+            print("❌ Введите число!")
 
 
-class HailoSegmentation:
-    def __init__(self, hef_path, output_type='FLOAT32'):
-        self.hef = HEF(hef_path)
-        self.target = VDevice()
-        self.network_group = self._configure_and_get_network_group()
-        self.network_group_params = self.network_group.create_params()
-        self.input_vstreams_params, self.output_vstreams_params = self._create_vstream_params(output_type)
-        self.input_vstream_info, self.output_vstream_info = self._get_and_print_vstream_info()
+def main():
+    # Инициализация модели и инференса
+    model_path = choose_model()
+    inference = HailoInference(model_path)
+    processor = Processor(inference, conf=0.5)
 
-    def _configure_and_get_network_group(self):
-        configure_params = ConfigureParams.create_from_hef(self.hef, interface=HailoStreamInterface.PCIe)
-        network_group = self.target.configure(self.hef, configure_params)[0]
-        return network_group
+    # Инициализация стереокамеры
+    stereo = StereoCameraSystem()
+    stereo.start()
 
-    def _create_vstream_params(self, output_type):
-        input_format_type = self.hef.get_input_vstream_infos()[0].format.type
-        input_vstreams_params = InputVStreamParams.make_from_network_group(self.network_group,
-                                                                           format_type=input_format_type)
-        output_vstreams_params = OutputVStreamParams.make_from_network_group(self.network_group,
-                                                                             format_type=getattr(FormatType,
-                                                                                                 output_type))
-        return input_vstreams_params, output_vstreams_params
+    print("🎥 Запуск стереопотока. Нажмите 'q' для выхода.")
 
-    def _get_and_print_vstream_info(self):
-        input_vstream_info = self.hef.get_input_vstream_infos()
-        output_vstream_info = self.hef.get_output_vstream_infos()
+    try:
+        while True:
+            frame_left, frame_right = stereo.get_synchronized_frames()
 
-        for layer_info in input_vstream_info:
-            print(f'Input layer: {layer_info.name} {layer_info.shape} {layer_info.format.type}')
-        for layer_info in output_vstream_info:
-            print(f'Output layer: {layer_info.name} {layer_info.shape} {layer_info.format.type}')
+            if frame_left is not None and frame_right is not None:
+                # Выполняем детекцию объектов для левого и правого кадров
+                segmentations = processor.process([frame_left, frame_right])
 
-        return input_vstream_info, output_vstream_info
+                # Получаем маски для левого изображения
+                left_masks = segmentations[0].get('absolute_masks', [])
 
-    def get_input_shape(self):
-        return self.input_vstream_info[0].shape
+                # Создаем пустую маску для левого изображения
+                left_mask_overlay = np.zeros_like(frame_left)
 
-    def run(self, input_data):
-        input_dict = self._prepare_input_data(input_data)
+                # Накладываем все найденные маски, объединяя их через np.maximum
+                for mask in left_masks:
+                    left_mask_overlay[:, :, 2] = np.maximum(left_mask_overlay[:, :, 2], mask * 255)
 
-        with InferVStreams(self.network_group, self.input_vstreams_params,
-                           self.output_vstreams_params) as infer_pipeline:
-            with self.network_group.activate(self.network_group_params):
-                output = infer_pipeline.infer(input_dict)[self.output_vstream_info[0].name]
+                # Объединяем оригинальное левое изображение с наложенной маской
+                left_blended = cv2.addWeighted(frame_left, 0.7, left_mask_overlay, 0.3, 0)
 
-        return output
+                # Приводим изображение к разрешению Full HD (1920x1080)
+                combined_resized = cv2.resize(left_blended, (1920, 1080))
 
-    def _prepare_input_data(self, input_data):
-        if isinstance(input_data, dict):
-            return input_data
-        elif isinstance(input_data, (list, tuple)):
-            return {self.input_vstream_info[0].name: np.array(input_data)}
-        else:
-            return {self.input_vstream_info[0].name: np.expand_dims(input_data, axis=0)}
+                # Отображаем результат
+                cv2.imshow("Stereo Segmentation", combined_resized)
 
-    def release_device(self):
-        self.target.release()
+            # Выход по нажатию клавиши 'q'
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+
+    except KeyboardInterrupt:
+        print("⏹️ Остановка потока...")
+
+    # Очистка ресурсов
+    stereo.stop()
+    cv2.destroyAllWindows()
+    print("✅ Поток завершён.")
 
 
-class ProcessorSegmentation:
-    def __init__(self, inference: HailoSegmentation):
-        self._inference = inference
-
-    def process(self, images: list):
-        start_time = time.time()
-        inf_images = []
-        height, width, _ = self._inference.get_input_shape()
-        preprocessed_images = []
-
-        for im in images:
-            inf_img = InferenceImageSegmentation(im)
-            inf_img.set_model_input_size(width, height)
-            preprocessed_images.append(inf_img.preprocess())
-            inf_images.append(inf_img)
-
-        raw_segmentation_data = self._inference.run(np.asarray(preprocessed_images))
-        final_result = []
-
-        for seg_map, im in zip(raw_segmentation_data, inf_images):
-            seg_map = np.argmax(seg_map, axis=0)  # Выбираем класс с максимальной вероятностью
-            seg_map_resized = im.postprocess(seg_map)
-            overlay = im.overlay_segmentation(seg_map_resized)
-            final_result.append(overlay)
-
-        elapsed_time = time.time() - start_time
-        print(f"[INFO] Total elapsed time: {elapsed_time:.3f} seconds")
-        return final_result
+if __name__ == '__main__':
+    main()

@@ -1,99 +1,145 @@
+#!/usr/bin/env python3
+"""
+Модуль для выполнения детекции с использованием HailoInference.
+Содержит классы: InferenceImage, HailoInference, Processor.
+"""
+
 import cv2
-from hailo_platform import (HEF, VDevice, HailoStreamInterface, InferVStreams, ConfigureParams,
-                            InputVStreamParams, OutputVStreamParams, FormatType, HailoSchedulingAlgorithm)
 import numpy as np
 import time
+from hailo_platform import (HEF, VDevice, HailoStreamInterface, InferVStreams, ConfigureParams,
+                            InputVStreamParams, OutputVStreamParams, FormatType, HailoSchedulingAlgorithm)
 
 
 class InferenceImage:
     def __init__(self, image: np.ndarray):
-        self.img_w = None
-        self.img_h = None
-        self.image = image
-        self.model_w = None
-        self.model_h = None
-        self.scale = None
-        self.new_img_w = None
-        self.new_img_h = None
-        self.pasted_w = None
-        self.pasted_h = None
-        self.padded_image = None
+        """
+        Инициализация объекта для обработки изображения.
+        """
+        self.image = image  # Исходное изображение
+        self.img_h, self.img_w, _ = self.image.shape  # Высота и ширина исходного изображения
+        # Размеры входного слоя модели (будут заданы)
+        self.model_h = None  # Высота модели (pixels)
+        self.model_w = None  # Ширина модели (pixels)
+        self.scale = None  # Коэффициент масштабирования
+        self.new_img_h = None  # Новая высота после масштабирования
+        self.new_img_w = None  # Новая ширина после масштабирования
+        self.pasted_h = None  # Отступ сверху
+        self.pasted_w = None  # Отступ слева
+        self.padded_image = None  # Изображение с добавленным паддингом
 
-    def set_model_input_size(self, model_w, model_h):
-        self.model_w = model_w
+    def set_model_input_size(self, model_h: int, model_w: int):
+        """
+        Задает размеры входного слоя модели.
+
+        Параметры:
+            model_h (int): Высота входного слоя модели.
+            model_w (int): Ширина входного слоя модели.
+        """
         self.model_h = model_h
+        self.model_w = model_w
 
     def preprocess(self):
-        img_h, img_w, _ = self.image.shape
+        """
+        Масштабирует изображение до размеров модели с сохранением пропорций,
+        добавляет паддинг для соответствия входному размеру модели.
 
-        self.scale = min(self.model_w / img_w, self.model_h / img_h)
-        self.new_img_w, self.new_img_h = int(img_w * self.scale), int(img_h * self.scale)
+        Возвращает:
+            np.ndarray: Подготовленное изображение.
+        """
+        # Вычисляем коэффициент масштабирования для подгона изображения под модель
+        self.scale = min(self.model_w / self.img_w, self.model_h / self.img_h)
+        self.new_img_w = int(self.img_w * self.scale)
+        self.new_img_h = int(self.img_h * self.scale)
+
+        # Изменяем размер исходного изображения
         image_resized = cv2.resize(self.image, (self.new_img_w, self.new_img_h))
 
-        # Create a new padded image
-        self.padded_image = np.zeros((self.model_w, self.model_h, 3), dtype=np.uint8)
+        # Создаем пустое изображение (паддинг) с формой (model_h, model_w, 3)
+        self.padded_image = np.zeros((self.model_h, self.model_w, 3), dtype=np.uint8)
+
+        # Вычисляем отступы для центрирования изображения
         self.pasted_w = (self.model_w - self.new_img_w) // 2
         self.pasted_h = (self.model_h - self.new_img_h) // 2
-        self.padded_image[self.pasted_h:self.pasted_h + self.new_img_h, self.pasted_w:self.pasted_w + self.new_img_w,
-        :] = image_resized
-        self.img_h, self.img_w = img_h, img_w
-        return self.padded_image
 
-    def preprocessed(self):
+        # Вставляем масштабированное изображение в центр пустого изображения
+        self.padded_image[self.pasted_h:self.pasted_h + self.new_img_h,
+        self.pasted_w:self.pasted_w + self.new_img_w, :] = image_resized
+
         return self.padded_image
 
     def postprocess(self, detection_results: dict):
-        # as of now just restore the original coordinates in the image
-        boxes = detection_results.get('detection_boxes')
+        """
+        Восстанавливает координаты обнаруженных объектов в исходное изображение.
+
+        Параметры:
+            detection_results (dict): Результаты детекции с нормализованными координатами.
+
+        Возвращает:
+            dict: Результаты детекции с абсолютными координатами.
+        """
+        boxes = detection_results.get('detection_boxes', [])
         absolute_boxes = []
         for box in boxes:
             abs_coords = []
+            # Предполагается, что порядок координат: [y1, x1, y2, x2]
             for i, coord in enumerate(box):
                 if i % 2 == 0:
-                    # height (y) is first coming
-                    abs_coord = coord * self.model_h
-                    abs_coord -= self.pasted_h
+                    # Координата по высоте (y)
+                    abs_coord = coord * self.model_h - self.pasted_h
                 else:
-                    # getting real coordinates first
-                    abs_coord = coord * self.model_w
-                    # get a coordinate without padding
-                    abs_coord -= self.pasted_w
-                # restore original coordinates
+                    # Координата по ширине (x)
+                    abs_coord = coord * self.model_w - self.pasted_w
+                # Восстанавливаем исходный масштаб
                 abs_coord /= self.scale
                 abs_coords.append(int(abs_coord))
             absolute_boxes.append(abs_coords)
-
         detection_results.update({'absolute_boxes': absolute_boxes})
         return detection_results
 
     def postprocess_mask(self, detection_results: dict):
         """
-        Восстанавливает маску к оригинальному размеру изображения с учетом перепутанных X и Y в YOLO.
+        Восстанавливает сегментационные маски к оригинальному размеру изображения.
+
+        Параметры:
+            detection_results (dict): Результаты детекции, содержащие ключ 'segmentation_masks'.
+
+        Возвращает:
+            dict: Результаты с восстановленными масками в ключе 'absolute_masks'.
         """
-        masks = detection_results.get('segmentation_masks')  # Получаем маски (массив [N, H, W])
+        masks = detection_results.get('segmentation_masks')
         if masks is None:
-            return detection_results  # Если масок нет, просто возвращаем результаты
+            return detection_results
 
         restored_masks = []
         for mask in masks:
-            # Масштабируем обратно к размеру модели
-            mask = cv2.resize(mask, (self.model_w, self.model_h), interpolation=cv2.INTER_NEAREST)
+            # Изменяем размер маски к размеру входного слоя модели
+            mask_resized = cv2.resize(mask, (self.model_w, self.model_h), interpolation=cv2.INTER_NEAREST)
 
-            # ❗ Обмен X и Y перед обрезкой паддинга
-            mask = mask.T
+            # Обмен осей, если требуется (в некоторых моделях X и Y могут быть перепутаны)
+            mask_transposed = mask_resized.T
 
-            # Убираем паддинг
-            mask = mask[self.pasted_h:self.pasted_h + self.new_img_h,
-                   self.pasted_w:self.pasted_w + self.new_img_w]
+            # Обрезаем паддинг, чтобы оставить область с изображением
+            mask_cropped = mask_transposed[self.pasted_h:self.pasted_h + self.new_img_h,
+                           self.pasted_w:self.pasted_w + self.new_img_w]
 
             # Восстанавливаем исходный размер изображения
-            restored_mask = cv2.resize(mask, (self.img_w, self.img_h), interpolation=cv2.INTER_NEAREST)
+            restored_mask = cv2.resize(mask_cropped, (self.img_w, self.img_h), interpolation=cv2.INTER_NEAREST)
             restored_masks.append(restored_mask)
 
         detection_results.update({'absolute_masks': np.array(restored_masks, dtype=np.uint8)})
         return detection_results
 
     def draw_boxes(self, results: dict):
+        """
+        Рисует прямоугольники обнаруженных объектов на изображении.
+
+        Параметры:
+            results (dict): Результаты детекции, содержащие ключи 'absolute_boxes', 'detection_scores', 'detection_classes'.
+
+        Возвращает:
+            np.ndarray: Изображение с нарисованными прямоугольниками.
+        """
         boxes = results.get('absolute_boxes', [])
         scores = results.get('detection_scores', [])
         classes = results.get('detection_classes', [])
@@ -102,20 +148,19 @@ class InferenceImage:
             class_id = classes[i] if i < len(classes) else "Unknown"
             score = scores[i] if i < len(scores) else 0.0
             label = f'{class_id} ({score:.2f})'
-
             cv2.rectangle(self.image, (x1, y1), (x2, y2), (0, 255, 0), 2)
             cv2.putText(self.image, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-
         return self.image
 
 
 class HailoInference:
-    def __init__(self, hef_path, output_type='FLOAT32'):
+    def __init__(self, hef_path: str, output_type: str = 'FLOAT32'):
         """
-        Initialize the HailoInference class with the provided HEF model file path.
+        Инициализация HailoInference с использованием HEF модели.
 
-        Args:
-            hef_path (str): Path to the HEF model file.
+        Параметры:
+            hef_path (str): Путь к HEF файлу модели.
+            output_type (str): Тип выходных данных модели.
         """
         self.hef = HEF(hef_path)
         self.target = VDevice()
@@ -126,24 +171,21 @@ class HailoInference:
 
     def _configure_and_get_network_group(self):
         """
-        Configure the Hailo device and get the network group.
-
-        Returns:
-            NetworkGroup: Configured network group.
+        Конфигурирует устройство Hailo и возвращает группу сетей.
         """
         configure_params = ConfigureParams.create_from_hef(self.hef, interface=HailoStreamInterface.PCIe)
         network_group = self.target.configure(self.hef, configure_params)[0]
         return network_group
 
-    def _create_vstream_params(self, output_type):
+    def _create_vstream_params(self, output_type: str):
         """
-        Create input and output stream parameters.
+        Создает параметры для входного и выходного потоков.
 
-        Args:
-            output_type (str): Format type of the output stream.
+        Параметры:
+            output_type (str): Тип формата для выходного потока.
 
-        Returns:
-            tuple: Input and output stream parameters.
+        Возвращает:
+            tuple: Параметры входного и выходного потоков.
         """
         input_format_type = self.hef.get_input_vstream_infos()[-1].format.type
         input_vstreams_params = InputVStreamParams.make_from_network_group(self.network_group,
@@ -155,10 +197,10 @@ class HailoInference:
 
     def _get_and_print_vstream_info(self):
         """
-        Get and print information about input and output stream layers.
+        Получает и выводит информацию о входных и выходных потоках.
 
-        Returns:
-            tuple: List of input stream layer information, List of output stream layer information.
+        Возвращает:
+            tuple: Списки информации о входных и выходных потоках.
         """
         input_vstream_info = self.hef.get_input_vstream_infos()
         output_vstream_info = self.hef.get_output_vstream_infos()
@@ -171,16 +213,16 @@ class HailoInference:
         return input_vstream_info, output_vstream_info
 
     @staticmethod
-    def extract_detections(input_data, conf_threshold: float = 0.5):
+    def extract_detections(input_data, conf_threshold: float = 0.5) -> dict:
         """
-        Extract detections from the input data.
+        Извлекает детекции из выходных данных модели.
 
-        Args:
-            input_data (list): Raw detections from the model.
-            threshold (float): Score threshold for filtering detections.
+        Параметры:
+            input_data (list): Сырые данные детекции.
+            conf_threshold (float): Порог уверенности для фильтрации детекций.
 
-        Returns:
-            dict: Filtered detection results.
+        Возвращает:
+            dict: Отфильтрованные детекции.
         """
         boxes, scores, classes = [], [], []
         num_detections = 0
@@ -188,10 +230,8 @@ class HailoInference:
         for i, detection in enumerate(input_data):
             if len(detection) == 0:
                 continue
-
             for det in detection:
                 bbox, score = det[:4], det[4]
-
                 if score >= conf_threshold:
                     boxes.append(bbox)
                     scores.append(score)
@@ -205,88 +245,79 @@ class HailoInference:
             'num_detections': num_detections
         }
 
-    def extract_segmentations(input_data: np.ndarray, conf_threshold: float = 0.5) -> dict[str, any]:
+    @staticmethod
+    def extract_segmentations(input_data: np.ndarray, conf_threshold: float = 0.5) -> dict:
         """
-        Extract segmentations from YOLOv8 segmentation output.
+        Извлекает сегментационные данные из выходных данных модели YOLOv8.
 
-        Args:
-            input_data (np.ndarray): YOLOv8 segmentation output, shape (160, 160, 32).
-            conf_threshold (float): Confidence threshold to filter segmentations.
+        Параметры:
+            input_data (np.ndarray): Выходные данные сегментации модели, форма (H, W, num_classes).
+            conf_threshold (float): Порог уверенности для фильтрации сегментаций.
 
-        Returns:
-            Dict[str, Any]: Extracted segmentations with bounding boxes, masks, and scores.
+        Возвращает:
+            dict: Извлеченные сегментации, включая маски, ограничивающие рамки и оценки.
         """
-        height, width, num_classes = input_data.shape  # (160, 160, 32)
-
+        height, width, num_classes = input_data.shape
         masks, bounding_boxes, scores, classes = [], [], [], []
 
         for class_id in range(num_classes):
-            class_map = input_data[:, :, class_id]  # Карта для текущего класса
-
-            # Применяем threshold (если нужно, можно заменить на sigmoid(class_map))
+            class_map = input_data[:, :, class_id]
             binary_mask = (class_map > conf_threshold).astype(np.uint8)
-
-            if np.sum(binary_mask) == 0:  # Пропустить пустые маски
+            if np.sum(binary_mask) == 0:
                 continue
-
-            # Находим контуры объектов
+            # Поиск контуров для текущего класса
             contours, _ = cv2.findContours(binary_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
             for contour in contours:
-                # Получаем ограничивающий прямоугольник
                 x, y, w, h = cv2.boundingRect(contour)
-                x_min, y_min, x_max, y_max = x, y, x + w, y + h
-
                 masks.append(binary_mask)
-                bounding_boxes.append([x_min, y_min, x_max, y_max])
-                scores.append(np.max(class_map))  # Максимальная уверенность в сегменте
+                bounding_boxes.append([x, y, x + w, y + h])
+                scores.append(np.max(class_map))
                 classes.append(class_id)
 
         return {
-            'segmentation_masks': masks,  # Бинарные маски сегментов
-            'bounding_boxes': bounding_boxes,  # Ограничивающие рамки [x_min, y_min, x_max, y_max]
-            'detection_scores': scores,  # Максимальные confidence
-            'detection_classes': classes,  # Индексы классов
-            'num_segmentations': len(masks)  # Количество найденных объектов
+            'segmentation_masks': masks,
+            'bounding_boxes': bounding_boxes,
+            'detection_scores': scores,
+            'detection_classes': classes,
+            'num_segmentations': len(masks)
         }
 
     def get_input_shape(self):
         """
-        Get the shape of the model's input layer.
+        Получает форму входного слоя модели.
 
-        Returns:
-            tuple: Shape of the model's input layer.
+        Возвращает:
+            tuple: Форма входного слоя (высота, ширина, каналы).
         """
-        return self.input_vstream_info[0].shape  # Assumes that the model has one input
+        # Предполагается, что модель имеет один вход
+        return self.input_vstream_info[0].shape
 
     def run(self, input_data):
         """
-        Run inference on Hailo-8 device.
+        Запускает инференс на устройстве Hailo-8.
 
-        Args:
-            input_data (np.ndarray, dict, list, tuple): Input data for inference.
+        Параметры:
+            input_data: Данные для инференса (np.ndarray, dict, list, tuple).
 
-        Returns:
-            np.ndarray: Inference output.
+        Возвращает:
+            Выход инференса.
         """
         input_dict = self._prepare_input_data(input_data)
-
         with InferVStreams(self.network_group, self.input_vstreams_params,
                            self.output_vstreams_params) as infer_pipeline:
             with self.network_group.activate(self.network_group_params):
                 output = infer_pipeline.infer(input_dict)[self.output_vstream_info[0].name]
-
         return output
 
     def _prepare_input_data(self, input_data):
         """
-        Prepare input data for inference.
+        Подготавливает данные для инференса.
 
-        Args:
-            input_data (np.ndarray, dict, list, tuple): Input data for inference.
+        Параметры:
+            input_data: Данные для инференса.
 
-        Returns:
-            dict: Prepared input data.
+        Возвращает:
+            dict: Подготовленные данные.
         """
         input_dict = {}
         if isinstance(input_data, dict):
@@ -298,37 +329,59 @@ class HailoInference:
             if input_data.ndim == 3:
                 input_data = np.expand_dims(input_data, axis=0)
             input_dict[self.input_vstream_info[0].name] = input_data
-
         return input_dict
 
     def release_device(self):
         """
-        Release the Hailo device.
+        Освобождает устройство Hailo.
         """
         self.target.release()
 
 
 class Processor:
     def __init__(self, inference: HailoInference, conf: float = 0.5):
+        """
+        Инициализация процессора для обработки изображений с инференсом.
+
+        Параметры:
+            inference (HailoInference): Экземпляр класса HailoInference.
+            conf (float): Порог уверенности для детекции.
+        """
         self._inference = inference
         self._conf = conf
 
-    def process(self, images: list):
+    def process(self, images: list) -> list:
+        """
+        Обрабатывает список изображений, выполняет инференс и постобработку результатов.
+
+        Параметры:
+            images (list): Список изображений (np.ndarray).
+
+        Возвращает:
+            list: Список результатов инференса с постобработкой.
+        """
         start_time = time.time()
         inf_images = []
-        height, width, _ = self._inference.get_input_shape()
+        # Получаем форму входного слоя модели: (model_h, model_w, channels)
+        model_h, model_w, _ = self._inference.get_input_shape()
         preprocessed_images = []
         for im in images:
             inf_img = InferenceImage(im)
-            inf_img.set_model_input_size(width, height)
-            preprocessed_images.append(inf_img.preprocess())
+            # Передаем правильный порядок: сначала высота, затем ширина
+            inf_img.set_model_input_size(model_h, model_w)
+            preprocessed = inf_img.preprocess()
+            preprocessed_images.append(preprocessed)
             inf_images.append(inf_img)
+
+        # Стекуем изображения для инференса
         raw_detect_data = self._inference.run(np.stack(preprocessed_images))
         final_result = []
-        for det, im in zip(raw_detect_data, inf_images):
+        for det, inf_img in zip(raw_detect_data, inf_images):
+            # Извлекаем сегментации из результатов инференса
             result = HailoInference.extract_segmentations(det, self._conf)
-            final_result.append(im.postprocess_mask(result))
+            # Постобработка масок для восстановления исходного размера изображения
+            final_result.append(inf_img.postprocess_mask(result))
 
-        elapsed_time = time.time() - start_time  # Вычисляем общее время выполнения
+        elapsed_time = time.time() - start_time
         print(f"[INFO] Total elapsed time: {elapsed_time:.3f} seconds")
         return final_result
