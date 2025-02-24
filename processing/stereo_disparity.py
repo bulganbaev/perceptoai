@@ -28,7 +28,7 @@ def filter_people(results):
     filtered_classes = []
 
     for i, class_id in enumerate(results['detection_classes']):
-        if class_id == 0:
+        if class_id == 2:
             filtered_boxes.append(results['absolute_boxes'][i])
             filtered_scores.append(results['detection_scores'][i])
             filtered_classes.append(class_id)
@@ -99,7 +99,7 @@ def match_boxes(left_results, right_results):
 def draw_boxes(image, results):
     """Отрисовка bbox"""
     for (y1, x1, y2, x2), score in zip(results['absolute_boxes'], results['detection_scores']):
-        label = f"Person ({score:.2f})"
+        label = f"Car ({score:.2f})"
         cv2.rectangle(image, (x1, y1), (x2, y2), (0, 255, 0), 2)
         cv2.putText(image, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
     return image
