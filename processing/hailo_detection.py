@@ -156,14 +156,14 @@ class HailoInference:
                 continue
 
             for det in detection:
-                bbox = det[:4]  # Первые 4 значения - это координаты [x1, y1, x2, y2]
-                score = det[4]  # Пятый элемент - это уверенность
-                class_id = int(det[5]) if len(det) > 5 else 0  # Шестой элемент - ID класса (если есть)
+                bbox = det[:4]  # Первые 4 значения - координаты [x1, y1, x2, y2]
+                score = det[4]  # Пятый элемент - уверенность
+                class_id = int(det[5]) if len(det) > 5 else -1  # Шестой элемент - ID класса, если он есть
 
                 if score >= conf_threshold:
                     boxes.append(bbox)
                     scores.append(score)
-                    classes.append(class_id)
+                    classes.append(class_id)  # Теперь классы должны быть корректными
                     num_detections += 1
 
         return {
