@@ -9,7 +9,7 @@ from picamera2 import Picamera2
 
 class CameraDriver:
     """
-    Драйвер для работы с камерой OV5647 с автоматической настройкой экспозиции и синхронизацией кадров.
+    Драйвер для камеры OV5647 с возможностью синхронизации параметров экспозиции.
     """
 
     def __init__(self, camera_id=0, width=1920, height=1080, autofocus=True):
@@ -19,8 +19,10 @@ class CameraDriver:
         self.running = False
         self.frame = None
         self.autofocus = autofocus
-        self.auto_adjust = True  # Автонастройка освещения
+        self.auto_adjust = False  # Только первая камера выполняет коррекцию
         self.last_adjust_time = time.time()
+        self.exposure_time = 1000
+        self.analogue_gain = 1.0
         self.frame_ready = threading.Condition()  # Синхронизация кадров
 
         try:
@@ -61,7 +63,7 @@ class CameraDriver:
                 with self.frame_ready:
                     self.frame_ready.notify_all()
 
-                # Автоматическая коррекция экспозиции раз в 1 сек
+                # Только первая камера выполняет автонастройку экспозиции
                 if self.auto_adjust and time.time() - self.last_adjust_time > 1:
                     self.adjust_exposure()
                     self.last_adjust_time = time.time()
@@ -80,18 +82,25 @@ class CameraDriver:
         avg_brightness = np.mean(gray)
 
         metadata = self.picam.capture_metadata()
-        exposure_time = metadata.get("ExposureTime", 1000)
-        analogue_gain = metadata.get("AnalogueGain", 1.0)
+        self.exposure_time = metadata.get("ExposureTime", 1000)
+        self.analogue_gain = metadata.get("AnalogueGain", 1.0)
 
         if avg_brightness < 50:  # Темно → увеличиваем экспозицию
-            exposure_time = min(exposure_time * 1.5, 30000)
-            analogue_gain = min(analogue_gain * 1.2, 4)
+            self.exposure_time = min(self.exposure_time * 1.5, 30000)
+            self.analogue_gain = min(self.analogue_gain * 1.2, 4)
         elif avg_brightness > 180:  # Ярко → уменьшаем экспозицию
-            exposure_time = max(exposure_time * 0.7, 1000)
-            analogue_gain = max(analogue_gain * 0.8, 1)
+            self.exposure_time = max(self.exposure_time * 0.7, 1000)
+            self.analogue_gain = max(self.analogue_gain * 0.8, 1)
 
-        self.picam.set_controls({"AeEnable": 0, "ExposureTime": int(exposure_time), "AnalogueGain": analogue_gain})
-        print(f"[Камера {self.camera_id}] Экспозиция: {int(exposure_time)} | Усиление: {analogue_gain:.2f}")
+        self.picam.set_controls({"AeEnable": 0, "ExposureTime": int(self.exposure_time), "AnalogueGain": self.analogue_gain})
+        print(f"[Камера {self.camera_id}] Экспозиция: {int(self.exposure_time)} | Усиление: {self.analogue_gain:.2f}")
+
+    def apply_exposure(self, exposure_time, analogue_gain):
+        """Применяет переданные параметры экспозиции (для ведомой камеры)"""
+        self.exposure_time = exposure_time
+        self.analogue_gain = analogue_gain
+        self.picam.set_controls({"AeEnable": 0, "ExposureTime": int(self.exposure_time), "AnalogueGain": self.analogue_gain})
+        print(f"[Камера {self.camera_id}] Применены параметры ведущей камеры: {int(self.exposure_time)} | {self.analogue_gain:.2f}")
 
     def get_frame(self):
         """Ждет, пока будет доступен новый кадр, и возвращает его"""
@@ -108,12 +117,16 @@ class CameraDriver:
 
 class StereoCameraSystem:
     """
-    Система стереокамер с автоэкспозицией и синхронным захватом кадров.
+    Система стереокамер с синхронизацией кадров и общей коррекцией экспозиции.
     """
 
     def __init__(self, camera0_id=0, camera1_id=1):
         self.cam0 = CameraDriver(camera_id=camera0_id, autofocus=True)
         self.cam1 = CameraDriver(camera_id=camera1_id, autofocus=True)
+
+        # Включаем автонастройку экспозиции только для первой камеры (ведущей)
+        self.cam0.auto_adjust = True
+        self.cam1.auto_adjust = False  # Вторая камера копирует параметры первой
 
     def start(self):
         """Запускает обе камеры"""
@@ -128,6 +141,10 @@ class StereoCameraSystem:
             self.cam1.frame_ready.wait()
             frame0 = self.cam0.get_frame()
             frame1 = self.cam1.get_frame()
+
+        # Синхронизация экспозиции: ведомая камера копирует параметры ведущей
+        self.cam1.apply_exposure(self.cam0.exposure_time, self.cam0.analogue_gain)
+
         return frame0, frame1
 
     def stop(self):
