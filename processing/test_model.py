@@ -82,7 +82,8 @@ try:
             if not result_right['absolute_boxes']:
                 print("Лог: В правом изображении не найдено объектов машины.")
 
-            print(result_left)
+            print(f'{result_left=}')
+            break
 
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
