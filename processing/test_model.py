@@ -4,7 +4,7 @@ import numpy as np
 from collections import deque
 from scipy.optimize import linear_sum_assignment
 from cam.camera_driver import StereoCameraSystem
-from processing.hailo_detection import HailoInference, Processor
+from processing.hailo_segmentation import HailoSegmentation, ProcessorSegmentation
 
 
 def filter_people(results):
@@ -56,8 +56,8 @@ def choose_model():
 
 # === 4. ЗАПУСК КАМЕР И ДЕТЕКЦИИ ===
 model_path = choose_model()
-inf = HailoInference(model_path)
-proc = Processor(inf, conf=0.5)
+inf = HailoSegmentation(model_path)
+proc = ProcessorSegmentation()
 stereo = StereoCameraSystem()
 stereo.start()
 
