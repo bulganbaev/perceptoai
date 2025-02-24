@@ -35,6 +35,8 @@ def filter_people(results):
             filtered_boxes.append(results['absolute_boxes'][i])
             filtered_scores.append(results['detection_scores'][i])
             filtered_classes.append(class_id)
+    if not filtered_boxes:
+        print("Лог: В текущем кадре не найдено объектов машины (class_id==2).")
     results.update({
         'absolute_boxes': filtered_boxes,
         'detection_classes': filtered_classes,
@@ -61,6 +63,8 @@ def compute_depth_rectified(left_results, right_results, matches, R1, R2, P1, P2
     """
     global depth_history
     depths = {}
+    if not matches:
+        print("Лог: Не удалось сопоставить объекты между изображениями.")
     for left_idx, right_idx in matches:
         left_box = left_results['absolute_boxes'][left_idx]
         right_box = right_results['absolute_boxes'][right_idx]
@@ -90,7 +94,7 @@ def compute_depth_rectified(left_results, right_results, matches, R1, R2, P1, P2
 
         # Используем фокусное расстояние из P1 (элемент [0,0])
         focal_rect = P1[0, 0]
-        # Вычисляем глубину: Depth = (focal * baseline) / disparity
+        # Вычисляем глубину: Depth = (focal * BASELINE) / disparity
         raw_depth = (focal_rect * BASELINE) / disparity
 
         # Фильтрация глубины для сглаживания
@@ -101,6 +105,8 @@ def compute_depth_rectified(left_results, right_results, matches, R1, R2, P1, P2
         final_depth = np.median(depth_history[obj_id])
 
         depths[obj_id] = (center_left_x, center_left_y, final_depth)
+    if not depths:
+        print("Лог: Глубина не вычислена, так как сопоставленных объектов нет.")
     return list(depths.values())
 
 
@@ -112,6 +118,10 @@ def match_boxes(left_results, right_results):
         Список пар индексов (левый, правый).
     """
     left_boxes, right_boxes = left_results["absolute_boxes"], right_results["absolute_boxes"]
+    if not left_boxes:
+        print("Лог: В левом изображении не найдено bounding boxes.")
+    if not right_boxes:
+        print("Лог: В правом изображении не найдено bounding boxes.")
     if not left_boxes or not right_boxes:
         return []
 
@@ -150,6 +160,9 @@ def choose_model():
     """
     models_dir = "data/models"
     model_files = [f for f in os.listdir(models_dir) if f.endswith(".hef")]
+    if not model_files:
+        print("Лог: Модели не найдены в директории", models_dir)
+        exit(1)
     print("\n📌 Доступные модели:")
     for i, model in enumerate(model_files):
         print(f"  {i + 1}. {model}")
@@ -192,6 +205,11 @@ try:
             detections = proc.process([frame_left, frame_right])
             result_left = filter_people(detections[0])
             result_right = filter_people(detections[1])
+
+            if not result_left['absolute_boxes']:
+                print("Лог: В левом изображении не найдено объектов машины.")
+            if not result_right['absolute_boxes']:
+                print("Лог: В правом изображении не найдено объектов машины.")
 
             # Сопоставляем bbox между левым и правым изображениями
             matches = match_boxes(result_left, result_right)
