@@ -52,11 +52,11 @@ try:
             left_masks = segmentations[0].get('absolute_masks', [])
 
             # Создаем пустую маску для правого изображения
-            right_mask_overlay = np.zeros_like(frame_right)
+            left_mask_overlay = np.zeros_like(frame_left)
 
             # Накладываем маски с левого изображения на правое
             for mask in left_masks:
-                right_mask_overlay[:, :, 2] = mask * 255  # Добавляем в синий канал
+                left_mask_overlay[:, :, 2] = mask * 255  # Добавляем в синий канал
 
             # Объединяем оригинальное правое изображение с наложенной маской
             left_blended = cv2.addWeighted(frame_left, 0.7, left_masks, 0.3, 0)
