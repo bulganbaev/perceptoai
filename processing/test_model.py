@@ -91,7 +91,7 @@ try:
             segmentations = proc.process([frame_left, frame_right])
 
             # Фильтрация только объектов нужного класса (например, человек)
-            segmentations = [filter_people(result) for result in segmentations]
+            # segmentations = [filter_people(result) for result in segmentations]
 
             # Отображение результатов
             for i, frame in enumerate([frame_left, frame_right]):
