@@ -207,7 +207,11 @@ class HailoInference:
                 bounding_boxes.append([x_min, y_min, x_max, y_max])
                 scores.append(np.max(class_map))  # Максимальная уверенность в сегменте
                 classes.append(class_id)
-
+        print(f'{masks=}')
+        print(f'{bounding_boxes=}')
+        print(f'{scores=}')
+        print(f'{classes=}')
+        print(f'{len(masks)=}')
         return {
             'segmentation_masks': masks,  # Бинарные маски сегментов
             'bounding_boxes': bounding_boxes,  # Ограничивающие рамки [x_min, y_min, x_max, y_max]
