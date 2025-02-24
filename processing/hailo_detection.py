@@ -86,9 +86,10 @@ class InferenceImage:
             # Восстанавливаем исходный размер изображения
             restored_mask = cv2.resize(mask, (self.img_w, self.img_h), interpolation=cv2.INTER_NEAREST)
             restored_masks.append(restored_mask)
+            print(f"[DEBUG] Количество масок: {len(restored_masks)}")
+
 
         detection_results.update({'absolute_masks': np.array(restored_masks, dtype=np.uint8)})
-        print(f"[DEBUG] Количество масок: {len(restored_masks)}")
         return detection_results
 
     def draw_boxes(self, results: dict):
@@ -320,7 +321,6 @@ class Processor:
         for det, im in zip(raw_detect_data, inf_images):
             result = HailoInference.extract_segmentations(det, self._conf)
             final_result.append(im.postprocess_mask(result))
-            print(f'{final_result=}')
 
 
         elapsed_time = time.time() - start_time  # Вычисляем общее время выполнения
