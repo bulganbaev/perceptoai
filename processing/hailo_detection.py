@@ -282,20 +282,25 @@ class HailoSegmentation:
         return image_resized
 
     @staticmethod
-    def print_output_info(output_data):
+    def print_output_info(self, output_data):
         """
         Выводит информацию о выходных тензорах.
 
         Args:
-            output_data (dict): Сырые выходные данные модели.
+            output_data (np.ndarray или dict): Сырые выходные данные модели.
         """
         print("\n=== [ Выходные данные модели ] ===")
-        for key, value in output_data.items():
-            print(f"[INFO] Тензор: {key}")
-            print(f"  - Форма: {value.shape}")
-            print(f"  - Тип данных: {value.dtype}")
-            print(f"  - Мин: {np.min(value)}, Макс: {np.max(value)}")
-            print(f"  - Среднее значение: {np.mean(value)}\n")
+
+        if isinstance(output_data, dict):
+            for key, value in output_data.items():
+                self.print_tensor_info(key, value)
+        elif isinstance(output_data, list):
+            for i, tensor in enumerate(output_data):
+                self.print_tensor_info(f"output_{i}", tensor)
+        elif isinstance(output_data, np.ndarray):
+            self.print_tensor_info("output", output_data)
+        else:
+            print("[ERROR] Неизвестный формат выходных данных!")
 
 
 
