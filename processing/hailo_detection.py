@@ -281,7 +281,7 @@ class HailoSegmentation:
         image_resized = cv2.resize(image, (model_w, model_h))
         return image_resized
 
-    @staticmethod
+
     def print_output_info(self, output_data):
         """
         Выводит информацию о выходных тензорах.
@@ -302,6 +302,20 @@ class HailoSegmentation:
         else:
             print("[ERROR] Неизвестный формат выходных данных!")
 
+    @staticmethod
+    def print_tensor_info(name, tensor):
+        """
+        Выводит информацию о конкретном тензоре.
+
+        Args:
+            name (str): Название тензора.
+            tensor (np.ndarray): Данные тензора.
+        """
+        print(f"[INFO] Тензор: {name}")
+        print(f"  - Форма: {tensor.shape}")
+        print(f"  - Тип данных: {tensor.dtype}")
+        print(f"  - Мин: {np.min(tensor)}, Макс: {np.max(tensor)}")
+        print(f"  - Среднее значение: {np.mean(tensor)}\n")
 
 
 
