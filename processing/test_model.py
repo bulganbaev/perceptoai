@@ -49,6 +49,10 @@ try:
             # Получаем маски для левого изображения
             left_mask = segmentations[0]
 
+            if left_mask is None or left_mask.size == 0:
+                print("⚠️ Ошибка: Получена пустая маска, пропускаем кадр.")
+                continue
+
             # Создаем пустую маску для наложения
             left_mask_overlay = np.zeros_like(frame_left)
             left_mask_overlay[:, :, 2] = (left_mask * 255).astype(np.uint8)  # Добавляем в синий канал
