@@ -4,6 +4,14 @@ from hailo_platform import (HEF, VDevice, HailoStreamInterface, InferVStreams, C
 import numpy as np
 import time
 
+
+def log_raw_output(data, filename="raw_output.txt"):
+    """Записываем сырые выходные данные нейросети в файл."""
+    with open(filename, "w") as f:
+        for key, value in data.items():
+            f.write(f"{key}: {value.shape}\n")
+            np.savetxt(f, value.reshape(-1), fmt="%.6f")
+            f.write("\n\n")
 class InferenceImage:
     def __init__(self, image: np.ndarray):
         self.image = image
@@ -35,10 +43,12 @@ class InferenceImage:
     def preprocessed(self):
         return self.padded_image
 
+
+
     def extract_segmentation_mask(self, model_outputs):
         output_layer = max(model_outputs.keys(), key=lambda k: model_outputs[k].shape[0])
         mask = model_outputs[output_layer]  # Выбираем слой с наибольшим разрешением
-        mask = mask.astype(np.float32) / 255.0  # Нормализуем значения
+        log_raw_output(mask)
         return mask
 
     def overlay_segmentation(self, mask):
