@@ -194,7 +194,7 @@ class HailoInference:
 
         with InferVStreams(self.network_group, self.input_vstreams_params, self.output_vstreams_params) as infer_pipeline:
             with self.network_group.activate(self.network_group_params):
-                output = infer_pipeline.infer(input_dict)[self.output_vstream_info[0].name]
+                output = infer_pipeline.infer(input_dict)
 
         return output
 
