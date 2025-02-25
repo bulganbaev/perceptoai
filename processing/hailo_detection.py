@@ -294,14 +294,14 @@ def decode_classes(class_tensor):
 
 def decode_bboxes(bbox_tensor, input_size=640):
     """
-    Декодирует предсказанные bounding boxes в абсолютные координаты.
+    Декодирует bounding boxes YOLOv8 в абсолютные координаты.
 
     Args:
-        bbox_tensor (np.ndarray): Тензор с bounding boxes (1, 20, 20, 32).
+        bbox_tensor (np.ndarray): Тензор формы (1, 20, 20, 32).
         input_size (int): Размер входного изображения.
 
     Returns:
-        list: Bounding boxes в формате [x1, y1, x2, y2].
+        list: Bounding boxes в формате [[x1, y1, x2, y2], ...].
     """
     bbox_tensor = bbox_tensor.squeeze(0)  # (20, 20, 32)
     num_anchors = bbox_tensor.shape[-1] // 4  # 32 / 4 = 8 якорей
@@ -313,14 +313,17 @@ def decode_bboxes(bbox_tensor, input_size=640):
         width = bbox_tensor[:, :, anchor_idx * 4 + 2]  # w
         height = bbox_tensor[:, :, anchor_idx * 4 + 3]  # h
 
-        x1 = (x_center - width / 2) * input_size / 20  # Преобразуем к 640x640
+        x1 = (x_center - width / 2) * input_size / 20
         y1 = (y_center - height / 2) * input_size / 20
         x2 = (x_center + width / 2) * input_size / 20
         y2 = (y_center + height / 2) * input_size / 20
 
-        boxes.append([x1, y1, x2, y2])
+        for i in range(x1.shape[0]):
+            for j in range(x1.shape[1]):
+                boxes.append([float(x1[i, j]), float(y1[i, j]), float(x2[i, j]), float(y2[i, j])])
 
-    return np.array(boxes)
+    return boxes  # Теперь список, а не массив
+
 
 
 
