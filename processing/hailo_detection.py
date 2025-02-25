@@ -228,6 +228,79 @@ class HailoInference:
         self.target.release()
 
 
+
+class HailoSegmentation:
+    def __init__(self, inference_model):
+        """
+        Класс для работы с моделью сегментации на Hailo.
+
+        Args:
+            inference_model (HailoInference): Экземпляр класса HailoInference.
+        """
+        self.inference = inference_model
+
+    def run_inference(self, image):
+        """
+        Запускает инференс на одном изображении и выводит сырые данные.
+
+        Args:
+            image (np.ndarray): Изображение для обработки (формат RGB).
+
+        Returns:
+            dict: Сырые выходные данные модели.
+        """
+        start_time = time.time()
+
+        # Подготовка изображения
+        height, width, _ = self.inference.get_input_shape()
+        input_image = self.preprocess(image, width, height)
+
+        # Запуск инференса
+        raw_outputs = self.inference.run(np.expand_dims(input_image, axis=0))
+
+        elapsed_time = time.time() - start_time
+        print(f"[INFO] Инференс выполнен за {elapsed_time:.3f} секунд")
+
+        # Выводим информацию о выходных тензорах
+        self.print_output_info(raw_outputs)
+
+        return raw_outputs
+
+    def preprocess(self, image, model_w, model_h):
+        """
+        Подготавливает изображение для подачи в модель.
+
+        Args:
+            image (np.ndarray): Исходное изображение.
+            model_w (int): Ширина входного слоя модели.
+            model_h (int): Высота входного слоя модели.
+
+        Returns:
+            np.ndarray: Подготовленное изображение.
+        """
+        image_resized = cv2.resize(image, (model_w, model_h))
+        return image_resized
+
+    @staticmethod
+    def print_output_info(output_data):
+        """
+        Выводит информацию о выходных тензорах.
+
+        Args:
+            output_data (dict): Сырые выходные данные модели.
+        """
+        print("\n=== [ Выходные данные модели ] ===")
+        for key, value in output_data.items():
+            print(f"[INFO] Тензор: {key}")
+            print(f"  - Форма: {value.shape}")
+            print(f"  - Тип данных: {value.dtype}")
+            print(f"  - Мин: {np.min(value)}, Макс: {np.max(value)}")
+            print(f"  - Среднее значение: {np.mean(value)}\n")
+
+
+
+
+
 class Processor:
     def __init__(self, inference: HailoInference, conf: float = 0.5):
         self._inference = inference

@@ -2,7 +2,7 @@ import cv2
 import os
 import numpy as np
 from cam.camera_driver import StereoCameraSystem
-from processing.hailo_segmentation import HailoSegmentation, Processor
+from processing.hailo_detection import HailoInference, HailoSegmentation
 
 def choose_model():
     """
@@ -31,8 +31,9 @@ def choose_model():
 
 # === 1. ИНИЦИАЛИЗАЦИЯ ===
 model_path = choose_model()
-inf = HailoSegmentation(model_path)
-proc = Processor(inf)
+hailo_model = HailoInference(model_path)
+segmentation = HailoSegmentation(hailo_model)
+
 stereo = StereoCameraSystem()
 stereo.start()
 
@@ -44,27 +45,8 @@ try:
 
         if frame_left is not None and frame_right is not None:
             # Выполняем сегментацию
-            segmentations = proc.process([frame_left, frame_right])
+            segmentations = segmentation.run_inference(frame_left)
 
-            # Получаем маски для левого изображения
-            left_mask = segmentations[0]
-
-            if left_mask is None or left_mask.size == 0:
-                print("⚠️ Ошибка: Получена пустая маска, пропускаем кадр.")
-                continue
-
-            # Создаем пустую маску для наложения
-            left_mask_overlay = np.zeros_like(frame_left)
-            left_mask_overlay[:, :, 2] = (left_mask * 255).astype(np.uint8)  # Добавляем в синий канал
-
-            # Объединяем оригинальное левое изображение с маской
-            left_blended = cv2.addWeighted(frame_left, 0.7, left_mask_overlay, 0.3, 0)
-
-            # Приводим к Full HD (1920x1080)
-            combined_resized = cv2.resize(left_blended, (1920, 1080))
-
-            # Показываем результат
-            cv2.imshow("Stereo Segmentation", combined_resized)
 
         # Выход по клавише 'q'
         if cv2.waitKey(1) & 0xFF == ord('q'):
