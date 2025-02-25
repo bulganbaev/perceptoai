@@ -262,20 +262,24 @@ def process_segmentation_mask(mask_tensor, original_size=(640, 640)):
         original_size (tuple): Оригинальный размер изображения.
 
     Returns:
-        np.ndarray: Маска сегментации размером `original_size`.
+        np.ndarray: Маска сегментации размером `original_size` (3 канала).
     """
-    mask = mask_tensor.squeeze(0)  # Убираем batch-dimension → (160, 160, 32)
+    mask = mask_tensor.squeeze(0)  # (160, 160, 32)
 
     # Применяем сигмоиду, чтобы перевести в [0,1]
     mask = 1 / (1 + np.exp(-mask))
 
-    # Убираем лишние каналы (если нужно только один класс, берем max по каналам)
-    mask = np.max(mask, axis=-1)
+    # Оставляем канал с наибольшими значениями (если много классов)
+    mask = np.max(mask, axis=-1)  # (160, 160)
 
-    # Масштабируем маску до исходного размера
+    # Масштабируем маску до исходного размера (640x640)
     mask_resized = cv2.resize(mask, original_size, interpolation=cv2.INTER_LINEAR)
 
-    return mask_resized
+    # Преобразуем в формат 3-х канального изображения (BGR)
+    mask_colored = (mask_resized * 255).astype(np.uint8)  # Приводим к диапазону 0-255
+    mask_colored = cv2.applyColorMap(mask_colored, cv2.COLORMAP_JET)  # Добавляем цвет
+
+    return mask_colored
 
 def decode_classes(class_tensor):
     """
