@@ -38,12 +38,22 @@ stereo.start()
 
 print("🎥 Запуск стереопотока. Нажмите 'q' для выхода.")
 
+def log_raw_output(data, filename="raw_output.txt"):
+    """Записываем сырые выходные данные нейросети в файл."""
+    with open(filename, "w") as f:
+        for key, value in data.items():
+            f.write(f"{key}: {value.shape}\n")
+            np.savetxt(f, value.reshape(-1), fmt="%.6f")
+            f.write("\n\n")
+
 try:
     while True:
         frame_left, frame_right = stereo.get_synchronized_frames()
 
         if frame_left is not None and frame_right is not None:
             # Выполняем сегментацию
+            yolo_output = inf.run([frame_left, frame_right])
+            log_raw_output(yolo_output)  # Логируем сырые данные
             segmentations = proc.process([frame_left, frame_right])
 
             # Получаем маски для левого изображения
