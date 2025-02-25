@@ -227,6 +227,101 @@ class HailoInference:
         """
         self.target.release()
 
+def visualize_results(image, bboxes, class_indices, mask):
+    """
+    Отображает bounding boxes и маску на изображении.
+
+    Args:
+        image (np.ndarray): Оригинальное изображение.
+        bboxes (list): Bounding boxes.
+        class_indices (list): Классы объектов.
+        mask (np.ndarray): Маска сегментации.
+    """
+    # Отображаем bounding boxes
+    for bbox, class_id in zip(bboxes, class_indices.flatten()):
+        x1, y1, x2, y2 = map(int, bbox)
+        cv2.rectangle(image, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        label = f"Class {class_id}"
+        cv2.putText(image, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+
+    # Применяем маску
+    mask_colored = (mask * 255).astype(np.uint8)
+    mask_colored = cv2.applyColorMap(mask_colored, cv2.COLORMAP_JET)
+    overlay = cv2.addWeighted(image, 0.6, mask_colored, 0.4, 0)
+
+    cv2.imshow("Segmentation", overlay)
+    cv2.waitKey(0)
+
+def process_segmentation_mask(mask_tensor, original_size=(640, 640)):
+    """
+    Обрабатывает выходную сегментационную маску YOLOv8.
+
+    Args:
+        mask_tensor (np.ndarray): Тензор формы (1, 160, 160, 32).
+        original_size (tuple): Оригинальный размер изображения.
+
+    Returns:
+        np.ndarray: Маска сегментации размером `original_size`.
+    """
+    mask = mask_tensor.squeeze(0)  # Убираем batch-dimension → (160, 160, 32)
+
+    # Применяем сигмоиду, чтобы перевести в [0,1]
+    mask = 1 / (1 + np.exp(-mask))
+
+    # Убираем лишние каналы (если нужно только один класс, берем max по каналам)
+    mask = np.max(mask, axis=-1)
+
+    # Масштабируем маску до исходного размера
+    mask_resized = cv2.resize(mask, original_size, interpolation=cv2.INTER_LINEAR)
+
+    return mask_resized
+
+def decode_classes(class_tensor):
+    """
+    Декодирует классы объектов.
+
+    Args:
+        class_tensor (np.ndarray): Тензор с классами (1, 20, 20, 80).
+
+    Returns:
+        list: Индексы классов с максимальной вероятностью.
+    """
+    class_tensor = class_tensor.squeeze(0)  # (20, 20, 80)
+    class_indices = np.argmax(class_tensor, axis=-1)  # Получаем индексы классов
+
+    return class_indices
+
+
+def decode_bboxes(bbox_tensor, input_size=640):
+    """
+    Декодирует предсказанные bounding boxes в абсолютные координаты.
+
+    Args:
+        bbox_tensor (np.ndarray): Тензор с bounding boxes (1, 20, 20, 32).
+        input_size (int): Размер входного изображения.
+
+    Returns:
+        list: Bounding boxes в формате [x1, y1, x2, y2].
+    """
+    bbox_tensor = bbox_tensor.squeeze(0)  # (20, 20, 32)
+    num_anchors = bbox_tensor.shape[-1] // 4  # 32 / 4 = 8 якорей
+
+    boxes = []
+    for anchor_idx in range(num_anchors):
+        x_center = bbox_tensor[:, :, anchor_idx * 4 + 0]  # x
+        y_center = bbox_tensor[:, :, anchor_idx * 4 + 1]  # y
+        width = bbox_tensor[:, :, anchor_idx * 4 + 2]  # w
+        height = bbox_tensor[:, :, anchor_idx * 4 + 3]  # h
+
+        x1 = (x_center - width / 2) * input_size / 20  # Преобразуем к 640x640
+        y1 = (y_center - height / 2) * input_size / 20
+        x2 = (x_center + width / 2) * input_size / 20
+        y2 = (y_center + height / 2) * input_size / 20
+
+        boxes.append([x1, y1, x2, y2])
+
+    return np.array(boxes)
+
 
 
 class HailoSegmentation:
@@ -241,17 +336,16 @@ class HailoSegmentation:
 
     def run_inference(self, image):
         """
-        Запускает инференс на одном изображении и выводит сырые данные.
+        Запускает инференс, обрабатывает bounding boxes, классы и маски.
 
         Args:
-            image (np.ndarray): Изображение для обработки (формат RGB).
+            image (np.ndarray): Входное изображение.
 
         Returns:
-            dict: Сырые выходные данные модели.
+            dict: Обработанные результаты.
         """
         start_time = time.time()
 
-        # Подготовка изображения
         height, width, _ = self.inference.get_input_shape()
         input_image = self.preprocess(image, width, height)
 
@@ -261,10 +355,23 @@ class HailoSegmentation:
         elapsed_time = time.time() - start_time
         print(f"[INFO] Инференс выполнен за {elapsed_time:.3f} секунд")
 
-        # Выводим информацию о выходных тензорах
-        self.print_output_info(raw_outputs)
+        # Декодируем bounding boxes
+        bboxes = decode_bboxes(raw_outputs['yolov8s_seg/conv75'])
 
-        return raw_outputs
+        # Декодируем классы
+        class_indices = decode_classes(raw_outputs['yolov8s_seg/conv74'])
+
+        # Обрабатываем сегментационную маску
+        mask = process_segmentation_mask(raw_outputs['yolov8s_seg/conv48'])
+
+        # Отображаем результаты
+        visualize_results(image, bboxes, class_indices, mask)
+
+        return {
+            "bboxes": bboxes,
+            "classes": class_indices,
+            "mask": mask
+        }
 
     def preprocess(self, image, model_w, model_h):
         """
