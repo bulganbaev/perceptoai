@@ -42,10 +42,20 @@ class InferenceImage:
         return mask
 
     def overlay_segmentation(self, mask):
+        """
+        Накладываем маску сегментации на изображение.
+        """
+        if mask is None or mask.size == 0:
+            print("⚠️ Ошибка: Маска сегментации пуста!")
+            return self.image  # Возвращаем оригинальное изображение без изменений
+
         mask_resized = cv2.resize(mask, (self.image.shape[1], self.image.shape[0]), interpolation=cv2.INTER_LINEAR)
+
         color_mask = np.zeros_like(self.image, dtype=np.uint8)
-        color_mask[:, :, 1] = (mask_resized * 255).astype(np.uint8)
+        color_mask[:, :, 2] = (mask_resized * 255).astype(np.uint8)  # Добавляем в синий канал
+
         return cv2.addWeighted(self.image, 0.7, color_mask, 0.3, 0)
+
 
 class HailoSegmentation:
     def __init__(self, hef_path, output_type='UINT8'):
