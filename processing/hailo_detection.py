@@ -229,17 +229,17 @@ class HailoInference:
 
 def visualize_results(image, bboxes, class_indices, mask):
     """
-    Отображает bounding boxes и маску на изображении.
+    Отображает bounding boxes и маску сегментации на изображении.
 
     Args:
         image (np.ndarray): Оригинальное изображение.
-        bboxes (list): Bounding boxes.
-        class_indices (list): Классы объектов.
+        bboxes (list): Bounding boxes [[x1, y1, x2, y2], ...].
+        class_indices (np.ndarray): Классы объектов.
         mask (np.ndarray): Маска сегментации.
     """
     # Отображаем bounding boxes
     for bbox, class_id in zip(bboxes, class_indices.flatten()):
-        x1, y1, x2, y2 = map(int, bbox)
+        x1, y1, x2, y2 = map(int, bbox[:4])  # Теперь bbox - это список из 4 чисел
         cv2.rectangle(image, (x1, y1), (x2, y2), (0, 255, 0), 2)
         label = f"Class {class_id}"
         cv2.putText(image, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
@@ -251,6 +251,7 @@ def visualize_results(image, bboxes, class_indices, mask):
 
     cv2.imshow("Segmentation", overlay)
     cv2.waitKey(0)
+
 
 def process_segmentation_mask(mask_tensor, original_size=(640, 640)):
     """
