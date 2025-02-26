@@ -174,7 +174,7 @@ class CameraDriver:
             self.sharpness = master.sharpness
             self.lens_position = master.lens_position
 
-        self.update_needed.set()
+        # self.update_needed.set()
 
     def get_frame(self):
         """Возвращает последний кадр"""
@@ -183,9 +183,9 @@ class CameraDriver:
     def stop_camera(self):
         """Останавливает потоки"""
         self.running = False
-        self.update_needed.set()
-        if self.update_thread:
-            self.update_thread.join()
+        # self.update_needed.set()
+        # if self.update_thread:
+        #     self.update_thread.join()
 
         if self.picam:
             self.picam.close()
