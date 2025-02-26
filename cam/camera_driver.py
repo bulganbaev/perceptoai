@@ -197,9 +197,9 @@ class StereoCameraSystem:
 
     def __init__(self, camera0_id=0, camera1_id=1):
         self.cam0 = CameraDriver(camera_id=camera0_id, autofocus=True)
-        self.cam1 = CameraDriver(camera_id=camera1_id, autofocus=False)
+        self.cam1 = CameraDriver(camera_id=camera1_id, autofocus=True)
 
-        self.cam0.auto_adjust = True
+        self.cam0.auto_adjust = False
         self.cam1.auto_adjust = False
 
         logging.info("Система стереокамер инициализирована.")
