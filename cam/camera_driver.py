@@ -1,25 +1,30 @@
 import cv2
 import numpy as np
 import threading
+import atexit
 import time
 import logging
-from libcamera import controls
 from picamera2 import Picamera2
+from libcamera import  controls
 
 # Настройки логирования
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.WARNING,
     format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[logging.FileHandler("stereo_camera.log"), logging.StreamHandler()]
+    handlers=[
+        logging.FileHandler("stereo_camera.log"),
+        logging.StreamHandler()
+    ]
 )
 
 
 class CameraDriver:
     """
-    Драйвер для камеры OV5647 с синхронизацией экспозиции и автофокусировки.
+    Драйвер для камеры OV5647 с синхронизацией экспозиции и фокуса в фоне.
     """
 
     def __init__(self, camera_id=0, width=1920, height=1080, autofocus=True):
+        self.lens_position = None
         self.camera_id = camera_id
         self.width = width
         self.height = height
@@ -27,30 +32,26 @@ class CameraDriver:
         self.frame = None
         self.autofocus = autofocus
         self.auto_adjust = False
-        self.exposure_lock = threading.Lock()
-        self.update_needed = threading.Event()
-
-        # Начальные настройки
-        self.exposure_time = 10000
+        self.last_adjust_time = time.time()
+        self.exposure_time = 1000
         self.analogue_gain = 1.0
         self.colour_gains = (1.0, 1.0)
         self.contrast = 1.0
         self.saturation = 1.0
         self.sharpness = 1.0
-        self.lens_position = None
+        self.exposure_lock = threading.Lock()
+        self.update_needed = threading.Event()
 
         try:
             self.picam = Picamera2(camera_id)
             controls_list = self.picam.camera_controls
             control_params = {}
 
-            # Автофокус, если поддерживается
             if "AfMode" in controls_list:
                 control_params["AfMode"] = controls.AfModeEnum.Continuous if autofocus else controls.AfModeEnum.Manual
                 control_params["AfSpeed"] = controls.AfSpeedEnum.Fast  # Быстрая автофокусировка
-                control_params["AfRange"] = controls.AfRangeEnum.Full  # Полный диапазон
+                control_params["AfRange"] = controls.AfRangeEnum.Full
 
-            # Создание конфигурации камеры
             config = self.picam.create_still_configuration(
                 main={'size': (self.width, self.height)},
                 controls=control_params
@@ -69,7 +70,13 @@ class CameraDriver:
             return
         self.running = True
         threading.Thread(target=self._capture_loop, daemon=True).start()
-        threading.Thread(target=self._apply_settings_loop, daemon=True).start()
+
+        if self.auto_adjust:
+            threading.Thread(target=self._exposure_adjust_loop, daemon=True).start()
+
+        self.update_thread = threading.Thread(target=self._apply_settings_loop, daemon=True)
+        self.update_thread.start()
+
         logging.info(f"Камера {self.camera_id} запущена.")
 
     def _capture_loop(self):
@@ -84,8 +91,14 @@ class CameraDriver:
         finally:
             self.picam.stop()
 
+    def _exposure_adjust_loop(self):
+        """Фоновый поток автоэкспозиции"""
+        while self.running:
+            time.sleep(1)
+            self.adjust_exposure()
+
     def adjust_exposure(self):
-        """Автоматически корректирует экспозицию и яркость"""
+        """Автоматически корректирует экспозицию и фокус камеры."""
         if self.frame is None:
             return
 
@@ -94,8 +107,15 @@ class CameraDriver:
 
         metadata = self.picam.capture_metadata()
         with self.exposure_lock:
-            self.exposure_time = metadata.get("ExposureTime", 10000)
+            self.exposure_time = metadata.get("ExposureTime", 1000)
             self.analogue_gain = metadata.get("AnalogueGain", 1.0)
+            self.colour_gains = metadata.get("ColourGains", (1.0, 1.0))
+            self.contrast = metadata.get("Contrast", 1.0)
+            self.saturation = metadata.get("Saturation", 1.0)
+            self.sharpness = metadata.get("Sharpness", 1.0)
+
+            if "LensPosition" in metadata:
+                self.lens_position = metadata["LensPosition"]
 
             if avg_brightness < 50:
                 self.exposure_time = min(self.exposure_time * 1.5, 600000)
@@ -105,9 +125,14 @@ class CameraDriver:
                 self.analogue_gain = max(self.analogue_gain * 0.8, 1)
 
             self.update_needed.set()
-
         logging.warning(f'{avg_brightness=}')
-        logging.info(f"[Камера {self.camera_id}] Обновление экспозиции: {self.exposure_time}, {self.analogue_gain}")
+        logging.warning(f'{self.exposure_time=}')
+        logging.info(
+            f"[Камера {self.camera_id}] Коррекция экспозиции: "
+            f"ExposureTime={self.exposure_time}, "
+            f"AnalogueGain={self.analogue_gain}, "
+            f"LensPosition={self.lens_position}"
+        )
 
     def _apply_settings_loop(self):
         """Фоновый поток обновления параметров камеры"""
@@ -157,7 +182,11 @@ class CameraDriver:
         """Останавливает потоки"""
         self.running = False
         self.update_needed.set()
-        self.picam.stop()
+        if self.update_thread:
+            self.update_thread.join()
+
+        if self.picam:
+            self.picam.close()
         logging.info(f"Камера {self.camera_id} остановлена.")
 
 
@@ -189,19 +218,3 @@ class StereoCameraSystem:
         self.cam0.stop_camera()
         self.cam1.stop_camera()
         logging.info("Система стереокамер остановлена.")
-
-
-# --- Тестирование ---
-if __name__ == "__main__":
-    stereo = StereoCameraSystem()
-    stereo.start()
-    time.sleep(3)
-
-    frame_left, frame_right = stereo.get_synchronized_frames()
-    if frame_left is not None and frame_right is not None:
-        cv2.imshow("Left Camera", frame_left)
-        cv2.imshow("Right Camera", frame_right)
-        cv2.waitKey(5000)
-        cv2.destroyAllWindows()
-
-    stereo.stop()
