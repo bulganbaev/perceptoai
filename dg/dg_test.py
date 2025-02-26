@@ -5,7 +5,7 @@ import degirum as dg
 model = dg.load_model(
     model_name='yolov8m_seg',
     inference_host_address='@local',
-    zoo_url='/home/drone/git/model_zoo/yolov8m_seg/yolov8m_seg.json'
+    zoo_url='/home/drone/git/model_zoo/yolov8n_seg/yolov8m_seg.json'
 )
 
 
@@ -19,6 +19,7 @@ try:
         frame_left, frame_right = stereo.get_synchronized_frames()
         inference_result = model(frame_left)
         cv2.imshow("Segmentation Output", inference_result.image_overlay)
+
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
 except KeyboardInterrupt:
