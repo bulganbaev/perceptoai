@@ -72,11 +72,11 @@ class CameraDriver:
         self.running = True
         threading.Thread(target=self._capture_loop, daemon=True).start()
 
-        if self.auto_adjust:
-            threading.Thread(target=self._exposure_adjust_loop, daemon=True).start()
+        # if self.auto_adjust:
+        #     threading.Thread(target=self._exposure_adjust_loop, daemon=True).start()
 
-        self.update_thread = threading.Thread(target=self._apply_settings_loop, daemon=True)
-        self.update_thread.start()
+        # self.update_thread = threading.Thread(target=self._apply_settings_loop, daemon=True)
+        # self.update_thread.start()
 
         logging.info(f"Камера {self.camera_id} запущена.")
 
