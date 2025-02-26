@@ -126,8 +126,7 @@ class CameraDriver:
                 self.analogue_gain = max(self.analogue_gain * 0.8, 1)
 
             self.update_needed.set()
-        logging.warning(f'{avg_brightness=}')
-        logging.warning(f'{self.exposure_time=}')
+
         logging.info(
             f"[Камера {self.camera_id}] Коррекция экспозиции: "
             f"ExposureTime={self.exposure_time}, "
@@ -212,7 +211,7 @@ class StereoCameraSystem:
     def get_synchronized_frames(self):
         """Возвращает последние кадры с обеих камер"""
         self.cam1.apply_settings(self.cam0)
-        print('Focus:', self.cam0.lens_position, self.cam1.lens_position)
+        logging.warning('Focus:', self.cam0.lens_position, self.cam1.lens_position)
         return self.cam0.get_frame(), self.cam1.get_frame()
 
     def stop(self):
