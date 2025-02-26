@@ -5,7 +5,7 @@ import degirum as dg
 model = dg.load_model(
     model_name='yolov8m_seg',
     inference_host_address='@local',
-    zoo_url='/home/drone/git/model_zoo/yolov8n_seg/yolov8m_seg.json'
+    zoo_url='/home/drone/git/model_zoo/yolov8m_seg/yolov8m_seg.json'
 )
 
 
