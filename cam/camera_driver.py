@@ -49,7 +49,7 @@ class CameraDriver:
 
             if "AfMode" in controls:
                 control_params["AfMode"] = 2 if autofocus else 0
-                control_params["AfSpeed"] = 2
+                control_params["AfSpeed"] = "Fast"
 
             config = self.picam.create_still_configuration(
                 main={'size': (self.width, self.height)},
@@ -209,7 +209,7 @@ class StereoCameraSystem:
 
     def get_synchronized_frames(self):
         """Возвращает последние кадры с обеих камер"""
-        # self.cam1.apply_settings(self.cam0)
+        self.cam1.apply_settings(self.cam0)
         return self.cam0.get_frame(), self.cam1.get_frame()
 
     def stop(self):
