@@ -50,7 +50,8 @@ class CameraDriver:
             if "AfMode" in controls_list:
                 control_params["AfMode"] = controls.AfModeEnum.Continuous if autofocus else controls.AfModeEnum.Manual
                 control_params["AfSpeed"] = controls.AfSpeedEnum.Fast  # Быстрая автофокусировка
-                control_params["AfRange"] = controls.AfRangeEnum.Full
+                control_params["AfRange"] = controls.AfRangeEnum.Normal
+                control_params["AfMetering"] = controls.AfMeteringEnum.Auto
 
             config = self.picam.create_still_configuration(
                 main={'size': (self.width, self.height)},
