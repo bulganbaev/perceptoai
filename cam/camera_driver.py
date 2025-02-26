@@ -171,7 +171,7 @@ class CameraDriver:
             self.contrast = master.contrast
             self.saturation = master.saturation
             self.sharpness = master.sharpness
-            self.lens_position = master.lens_position
+            # self.lens_position = master.lens_position
 
         self.update_needed.set()
 
@@ -196,7 +196,7 @@ class StereoCameraSystem:
 
     def __init__(self, camera0_id=0, camera1_id=1):
         self.cam0 = CameraDriver(camera_id=camera0_id, autofocus=True)
-        self.cam1 = CameraDriver(camera_id=camera1_id, autofocus=False)
+        self.cam1 = CameraDriver(camera_id=camera1_id, autofocus=True)
 
         self.cam0.auto_adjust = True
         self.cam1.auto_adjust = False
