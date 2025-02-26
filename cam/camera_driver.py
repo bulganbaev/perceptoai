@@ -211,7 +211,7 @@ class StereoCameraSystem:
     def get_synchronized_frames(self):
         """Возвращает последние кадры с обеих камер"""
         self.cam1.apply_settings(self.cam0)
-        logging.warning('Focus:', self.cam0.lens_position, self.cam1.lens_position)
+        logging.warning(f'Focus:, {self.cam0.lens_position}, {self.cam1.lens_position}')
         return self.cam0.get_frame(), self.cam1.get_frame()
 
     def stop(self):
