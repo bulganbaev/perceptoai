@@ -68,6 +68,15 @@ print(f"📏 Baseline (расстояние между камерами): {basel
 print("🌀 Матрица поворота (R):\n", R)
 print("🚀 Вектор трансляции (T):\n", T)
 
-# Сохраняем параметры
-np.savez("data/calibration/calibration_data.npz", mtxL=mtxL, distL=distL, mtxR=mtxR, distR=distR, R=R, T=T)
-print("✅ Калибровка завершена! Параметры сохранены в calibration_data.npz")
+# После калибровки камер
+focus_offset = mtxL[0, 0] / mtxR[0, 0]  # f_x (левая) / f_x (правая)
+
+# Сохраняем в файл
+np.savez("data/calibration/calibration_data.npz",
+         mtxL=mtxL, distL=distL,
+         mtxR=mtxR, distR=distR,
+         R=R, T=T,
+         focus_offset=focus_offset)
+
+print(f"📏 Вычисленный focus_offset: {focus_offset:.6f}")
+
