@@ -23,8 +23,8 @@ try:
         if frame0 is not None and frame1 is not None:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-            filename_left = f"data/images/left/left_{timestamp}.jpg"
-            filename_right = f"data/images/right/right_{timestamp}.jpg"
+            filename_left = f"/home/drone/Desktop/perceptoai/data/images/left/left_{timestamp}.jpg"
+            filename_right = f"/home/drone/Desktop/perceptoai/data/images/right/right_{timestamp}.jpg"
 
             cv2.imwrite(filename_left, frame0)
             cv2.imwrite(filename_right, frame1)
