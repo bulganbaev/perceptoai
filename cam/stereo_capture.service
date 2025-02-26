@@ -1,0 +1,16 @@
+[Unit]
+Description=Stereo Camera Auto Capture
+After=network.target
+
+[Service]
+User=drone
+Group=drone
+WorkingDirectory=/home/drone/Desktop/perceptoai/cam
+ExecStart=/home/drone/Desktop/perceptoai/venv/bin/python3 /home/drone/Desktop/perceptoai/cam/stream_saver.py
+Restart=always
+RestartSec=5
+StandardOutput=append:/home/drone/Desktop/perceptoai/cam/stereo_capture.log
+StandardError=append:/home/drone/Desktop/perceptoai/cam/stereo_capture.err
+
+[Install]
+WantedBy=multi-user.target
