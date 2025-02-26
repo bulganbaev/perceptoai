@@ -5,10 +5,10 @@ from datetime import datetime
 from camera_driver import StereoCameraSystem
 
 time.sleep(10)
-s
+
 # Создаем папки для сохранения снимков
-os.makedirs("data/images/left", exist_ok=True)
-os.makedirs("data/images/right", exist_ok=True)
+os.makedirs("/home/drone/Desktop/perceptoai/data/images/left", exist_ok=True)
+os.makedirs("/home/drone/Desktop/perceptoai/data/images/right", exist_ok=True)
 
 # Запускаем стерео-камеру
 stereoCam = StereoCameraSystem()
