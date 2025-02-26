@@ -22,7 +22,7 @@ class CameraDriver:
     Драйвер для камеры Arducam 16MP IMX519 с фиксированной экспозицией и усилением.
     """
 
-    def __init__(self, camera_id=0, width=1920, height=1080):
+    def __init__(self, camera_id=0, width=1920, height=1080, flip_horizontal = False, flip_vertical = False):
         self.camera_id = camera_id
         self.width = width
         self.height = height
@@ -35,6 +35,9 @@ class CameraDriver:
         self.contrast = 1.5  # Контраст выше стандартного
         self.saturation = 1.3  # Немного увеличенная насыщенность
         self.lens_position = 2.0  # Фиксированный фокус (1.5 - 3.0)
+
+        self.flip_vertical = flip_vertical
+        self.flip_horizontal = flip_horizontal
 
         try:
             self.picam = Picamera2(camera_id)
@@ -80,7 +83,13 @@ class CameraDriver:
             self.picam.start()
             while self.running:
                 frame = self.picam.capture_array()
-                self.frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                # Применяем инверсию кадра
+                if self.flip_horizontal:
+                    frame = cv2.flip(frame, 1)  # Отражение по горизонтали
+                if self.flip_vertical:
+                    frame = cv2.flip(frame, 0)
+                self.frame = frame
         except Exception as e:
             logging.error(f"Ошибка в потоке камеры {self.camera_id}: {e}")
         finally:
@@ -102,8 +111,8 @@ class StereoCameraSystem:
     """Система стереокамер с синхронизацией параметров."""
 
     def __init__(self, camera0_id=0, camera1_id=1):
-        self.cam0 = CameraDriver(camera_id=camera0_id)
-        self.cam1 = CameraDriver(camera_id=camera1_id)
+        self.cam0 = CameraDriver(camera_id=camera0_id, flip_vertical=True, flip_horizontal=True)
+        self.cam1 = CameraDriver(camera_id=camera1_id, flip_vertical=True, flip_horizontal=True)
 
         logging.info("Система стереокамер инициализирована.")
 
