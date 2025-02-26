@@ -49,7 +49,7 @@ class CameraDriver:
 
             if "AfMode" in controls:
                 control_params["AfMode"] = 2 if autofocus else 0
-                control_params["AfSpeed"] = 1
+                control_params["AfSpeed"] = 2
 
             config = self.picam.create_still_configuration(
                 main={'size': (self.width, self.height)},
