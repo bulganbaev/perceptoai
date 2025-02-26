@@ -17,6 +17,8 @@ stereo.start()
 try:
     while True:
         frame_left, frame_right = stereo.get_synchronized_frames()
+        if frame_left is None:
+            continue
         inference_result = model(frame_left)
         cv2.imshow("Segmentation Output", inference_result.image_overlay)
 
