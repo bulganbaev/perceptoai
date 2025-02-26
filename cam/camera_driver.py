@@ -46,7 +46,6 @@ class CameraDriver:
                 "AeEnable": 0,  # Отключаем автоэкспозицию
                 "ExposureTime": self.exposure_time,
                 "AnalogueGain": self.analogue_gain,
-                "DigitalGain": self.digital_gain,  # Новое: цифровое усиление
                 "AeMeteringMode": controls.AeMeteringModeEnum.Spot,  # Улучшенная работа в сложном освещении
                 "AeExposureMode": controls.AeExposureModeEnum.Short,  # Короткая выдержка
                 "ColourGains": self.colour_gains,  # Новое: коррекция баланса белого
