@@ -5,7 +5,7 @@ import atexit
 import time
 import logging
 from picamera2 import Picamera2
-from libcamera import  controls
+from libcamera import controls
 
 # Настройки логирования
 logging.basicConfig(
@@ -52,6 +52,8 @@ class CameraDriver:
                 control_params["AfSpeed"] = controls.AfSpeedEnum.Fast  # Быстрая автофокусировка
                 control_params["AfRange"] = controls.AfRangeEnum.Normal
                 control_params["AfMetering"] = controls.AfMeteringEnum.Auto
+                control_params["AeExposureMode"] = controls.AeExposureModeEnum.Short
+                control_params["AeEnable"] = 1
 
             config = self.picam.create_still_configuration(
                 main={'size': (self.width, self.height)},
