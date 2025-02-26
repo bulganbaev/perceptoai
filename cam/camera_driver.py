@@ -39,19 +39,20 @@ class CameraDriver:
         try:
             self.picam = Picamera2(camera_id)
             controls_list = self.picam.camera_controls
+            control_params = {}
 
-            control_params = {
-                "AfMode": controls.AfModeEnum.Manual,  # Отключаем автофокус
-                "LensPosition": self.lens_position,
-                "AeEnable": 0,  # Отключаем автоэкспозицию
-                "ExposureTime": self.exposure_time,
-                "AnalogueGain": self.analogue_gain,
-                "AeMeteringMode": controls.AeMeteringModeEnum.Spot,  # Улучшенная работа в сложном освещении
-                "AeExposureMode": controls.AeExposureModeEnum.Short,  # Короткая выдержка
-                "ColourGains": self.colour_gains,  # Новое: коррекция баланса белого
-                "Contrast": self.contrast,  # Новое: повышение контраста
-                "Saturation": self.saturation  # Новое: насыщенность выше стандартного
-            }
+            # control_params = {
+            #     "AfMode": controls.AfModeEnum.Manual,  # Отключаем автофокус
+            #     "LensPosition": self.lens_position,
+            #     "AeEnable": 0,  # Отключаем автоэкспозицию
+            #     "ExposureTime": self.exposure_time,
+            #     "AnalogueGain": self.analogue_gain,
+            #     "AeMeteringMode": controls.AeMeteringModeEnum.Spot,  # Улучшенная работа в сложном освещении
+            #     "AeExposureMode": controls.AeExposureModeEnum.Short,  # Короткая выдержка
+            #     "ColourGains": self.colour_gains,  # Новое: коррекция баланса белого
+            #     "Contrast": self.contrast,  # Новое: повышение контраста
+            #     "Saturation": self.saturation  # Новое: насыщенность выше стандартного
+            # }
 
             config = self.picam.create_still_configuration(
                 main={'size': (self.width, self.height)},
@@ -114,7 +115,6 @@ class StereoCameraSystem:
 
     def get_synchronized_frames(self):
         """Возвращает последние кадры с обеих камер"""
-        self.cam1.lens_position = self.cam0.lens_position  # Синхронизация фокуса
         return self.cam0.get_frame(), self.cam1.get_frame()
 
     def stop(self):
