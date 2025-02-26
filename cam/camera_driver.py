@@ -19,7 +19,7 @@ logging.basicConfig(
 
 class CameraDriver:
     """
-    Драйвер для камеры Arducam 16MP IMX519 с фиксированным фокусом и короткой выдержкой.
+    Драйвер для камеры Arducam 16MP IMX519 с фиксированной экспозицией и усилением.
     """
 
     def __init__(self, camera_id=0, width=1920, height=1080):
@@ -28,8 +28,12 @@ class CameraDriver:
         self.height = height
         self.running = False
         self.frame = None
-        self.exposure_time = 2000  # Короткая выдержка 2 мс
-        self.analogue_gain = 2.0  # Фиксированное усиление
+        self.exposure_time = 4000  # Увеличенная экспозиция (4 мс)
+        self.analogue_gain = 3.0  # Сильное усиление
+        self.digital_gain = 1.5  # Цифровое усиление для компенсации
+        self.colour_gains = (1.5, 1.5)  # Усиленный баланс белого
+        self.contrast = 1.5  # Контраст выше стандартного
+        self.saturation = 1.3  # Немного увеличенная насыщенность
         self.lens_position = 2.0  # Фиксированный фокус (1.5 - 3.0)
 
         try:
@@ -42,8 +46,12 @@ class CameraDriver:
                 "AeEnable": 0,  # Отключаем автоэкспозицию
                 "ExposureTime": self.exposure_time,
                 "AnalogueGain": self.analogue_gain,
-                "AeMeteringMode": controls.AeMeteringModeEnum.Spot,  # Меньше влияния бликов
-                "AeExposureMode": controls.AeExposureModeEnum.Short  # Короткая выдержка
+                "DigitalGain": self.digital_gain,  # Новое: цифровое усиление
+                "AeMeteringMode": controls.AeMeteringModeEnum.Spot,  # Улучшенная работа в сложном освещении
+                "AeExposureMode": controls.AeExposureModeEnum.Short,  # Короткая выдержка
+                "ColourGains": self.colour_gains,  # Новое: коррекция баланса белого
+                "Contrast": self.contrast,  # Новое: повышение контраста
+                "Saturation": self.saturation  # Новое: насыщенность выше стандартного
             }
 
             config = self.picam.create_still_configuration(
