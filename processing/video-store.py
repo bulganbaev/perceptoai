@@ -159,7 +159,7 @@ def draw_depth(image, results):
     """
     for x, y, depth in results:
         text = f"{depth:.1f} mm"
-        cv2.putText(image, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2)
+        cv2.putText(image, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 5, (255, 255, 255), 2)
     return image
 
 
