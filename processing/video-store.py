@@ -18,6 +18,13 @@ BASELINE = abs(T[0][0])  # Расстояние между камерами (м�
 depth_history = {}
 DEPTH_FILTER_SIZE = 5  # Размер скользящего окна
 
+# === 3. НАСТРОЙКА ВИДЕОЗАПИСИ ===
+out_file = "output.mp4"
+frame_size = (1024,768)  # Разрешение Full HD
+fps = 30  # Частота кадров
+fourcc = cv2.VideoWriter_fourcc(*"H264")  # Кодек для сохранения видео
+out = cv2.VideoWriter(out_file, fourcc, fps, frame_size)
+
 
 # === 3. ФУНКЦИИ ===
 
@@ -138,21 +145,37 @@ def draw_boxes(image, results):
     Отрисовка bounding boxes на изображении.
     """
     for (y1, x1, y2, x2), score in zip(results['absolute_boxes'], results['detection_scores']):
-        label = f"Car ({score:.2f})"
+        label = f"Bottle ({score:.2f})"
         cv2.rectangle(image, (x1, y1), (x2, y2), (0, 255, 0), 2)
         cv2.putText(image, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
     return image
 
 
-def draw_depth(image, depth_results):
+def draw_depth(image, results):
     """
     Отрисовка информации о глубине (среднее значение) на изображении.
     """
-    for x, y, depth in depth_results:
+    for x, y, depth in results:
         text = f"{depth:.1f} mm"
         cv2.putText(image, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2)
     return image
 
+
+def draw_status_text(image, text):
+    """
+    Отображает текст в левом верхнем углу кадра.
+
+    Параметры:
+        image: Кадр, на который нужно нанести текст.
+        text: Текст, который нужно вывести.
+    """
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    position = (50, 50)  # Координаты для верхнего левого угла
+    font_scale = 1  # Размер шрифта
+    font_color = (0, 0, 255)  # Красный цвет (BGR)
+    thickness = 2  # Толщина линии
+    cv2.putText(image, text, position, font, font_scale, font_color, thickness)
+    return image
 
 def choose_model():
     """
@@ -206,11 +229,13 @@ try:
             result_left = filter_people(detections[0])
             result_right = filter_people(detections[1])
 
+            status = "FOLLOWING"
             if not result_left['absolute_boxes']:
                 print("Лог: В левом изображении не найдено объектов машины.")
+                status = "SEARCHING"
             if not result_right['absolute_boxes']:
                 print("Лог: В правом изображении не найдено объектов машины.")
-
+                status = "SEARCHING"
             # Сопоставляем bbox между левым и правым изображениями
             matches = match_boxes(result_left, result_right)
 
@@ -220,9 +245,12 @@ try:
             # Отрисовка bounding boxes и информации о глубине на левом изображении
             processed_left = draw_boxes(frame_left, result_left)
             processed_left = draw_depth(processed_left, depth_results)
-
+            processed_right = draw_status_text(draw_boxes(frame_right, result_right), status)
+            print(processed_left.shape, processed_right.shape)
             # Объединяем левый и правый кадры для отображения
-            combined = cv2.hconcat([processed_left, frame_right])
+            combined = cv2.hconcat([processed_left, processed_right])
+            out.write(combined)  # Запись кадра в видеофайл
+
             cv2.namedWindow("Stereo Depth", cv2.WINDOW_NORMAL)
             cv2.resizeWindow("Stereo Depth", 1024, 768)
             cv2.imshow("Stereo Depth", combined)
@@ -233,5 +261,7 @@ except KeyboardInterrupt:
     print("⏹️ Остановка потока...")
 
 stereo.stop()
+out.release()  # Закрытие видеозаписи
+
 cv2.destroyAllWindows()
 print("✅ Поток завершён.")
