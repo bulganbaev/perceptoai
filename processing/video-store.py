@@ -1,3 +1,5 @@
+import time
+
 import cv2
 import os
 import numpy as np
@@ -266,9 +268,9 @@ try:
             break
 except KeyboardInterrupt:
     print("⏹️ Остановка потока...")
-
-stereo.stop()
 out.release()  # Закрытие видеозаписи
+time.sleep(5)
+stereo.stop()
 
 cv2.destroyAllWindows()
 print("✅ Поток завершён.")
