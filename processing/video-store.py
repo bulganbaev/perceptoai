@@ -22,7 +22,7 @@ DEPTH_FILTER_SIZE = 5  # Размер скользящего окна
 out_file = "output.mp4"
 frame_size = (1920, 1080)  # Разрешение Full HD
 fps = 30  # Частота кадров
-fourcc = cv2.VideoWriter_fourcc(*"H264")  # Кодек для сохранения видео
+fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # Кодек для сохранения видео
 out = cv2.VideoWriter(out_file, fourcc, fps, frame_size)
 
 
