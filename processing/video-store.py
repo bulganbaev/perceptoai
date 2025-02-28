@@ -20,7 +20,7 @@ DEPTH_FILTER_SIZE = 5  # Размер скользящего окна
 
 # === 3. НАСТРОЙКА ВИДЕОЗАПИСИ ===
 out_file = "output.mp4"
-frame_size = (1024,768)  # Разрешение Full HD
+frame_size = (1920, 1080)  # Разрешение Full HD
 fps = 30  # Частота кадров
 fourcc = cv2.VideoWriter_fourcc(*"H264")  # Кодек для сохранения видео
 out = cv2.VideoWriter(out_file, fourcc, fps, frame_size)
@@ -249,11 +249,18 @@ try:
             print(processed_left.shape, processed_right.shape)
             # Объединяем левый и правый кадры для отображения
             combined = cv2.hconcat([processed_left, processed_right])
-            out.write(combined)  # Запись кадра в видеофайл
 
             cv2.namedWindow("Stereo Depth", cv2.WINDOW_NORMAL)
             cv2.resizeWindow("Stereo Depth", 1024, 768)
             cv2.imshow("Stereo Depth", combined)
+
+            if combined.shape[:2] != (frame_size[1], frame_size[0]):
+                combined = cv2.resize(combined, frame_size)
+
+            if combined.dtype != np.uint8:
+                combined = combined.astype(np.uint8)
+            out.write(combined)  # Запись кадра в видеофайл
+
 
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
